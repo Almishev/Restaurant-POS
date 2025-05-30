@@ -1,6 +1,7 @@
 const intialState = {
   loading: false,
   cartItems: [],
+  totalAmount: 0,
 };
 
 export const rootReducer = (state = intialState, action) => {
@@ -15,26 +16,43 @@ export const rootReducer = (state = intialState, action) => {
         ...state,
         loading: false,
       };
-    case "ADD_TO_CART":
+    case "ADD_TO_CART": {
+      const newCart = [...state.cartItems, action.payload];
+      const newTotal = newCart.reduce((sum, item) => sum + item.price * item.quantity, 0);
       return {
         ...state,
-        cartItems: [...state.cartItems, action.payload],
+        cartItems: newCart,
+        totalAmount: newTotal,
       };
-    case "UPDATE_CART":
+    }
+    case "UPDATE_CART": {
+      const newCart = state.cartItems.map((item) =>
+        item._id === action.payload._id
+          ? { ...item, quantity: action.payload.quantity }
+          : item
+      );
+      const newTotal = newCart.reduce((sum, item) => sum + item.price * item.quantity, 0);
       return {
         ...state,
-        cartItems: state.cartItems.map((item) =>
-          item._id === action.payload._id
-            ? { ...item, quantity: action.payload.quantity }
-            : item
-        ),
+        cartItems: newCart,
+        totalAmount: newTotal,
       };
-    case "DELETE_FROM_CART":
+    }
+    case "DELETE_FROM_CART": {
+      const newCart = state.cartItems.filter(
+        (item) => item._id !== action.payload._id
+      );
+      const newTotal = newCart.reduce((sum, item) => sum + item.price * item.quantity, 0);
       return {
         ...state,
-        cartItems: state.cartItems.filter(
-          (item) => item._id !== action.payload._id
-        ),
+        cartItems: newCart,
+        totalAmount: newTotal,
+      };
+    }
+    case "UPDATE_TOTAL_AMOUNT":
+      return {
+        ...state,
+        totalAmount: action.payload,
       };
     default:
       return state;

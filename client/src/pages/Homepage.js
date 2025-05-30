@@ -4,11 +4,26 @@ import axios from "axios";
 import { Row, Col, message } from "antd";
 import { useDispatch } from "react-redux";
 import ItemList from "../components/ItemList";
+import { useNavigate } from "react-router-dom";
+import SelectedTableInfo from "../components/SelectedTableInfo";
+
 const Homepage = () => {
   const [itemsData, setItemsData] = useState([]);
   const [categories, setCategories] = useState([]);
   const [selecedCategory, setSelecedCategory] = useState(null);
   const dispatch = useDispatch();
+  const navigate = useNavigate();
+
+  // Проверка за избрана маса
+  useEffect(() => {
+    const selectedTable = localStorage.getItem("selectedTable");
+    if (!selectedTable) {
+      navigate("/tables");
+    }
+  }, [navigate]);
+
+
+ 
 
   // Fetch categories
   const fetchCategories = async () => {
@@ -44,6 +59,8 @@ const Homepage = () => {
 
   return (
     <DefaultLayout>
+      <SelectedTableInfo />
+      
       <Row gutter={24}>
         {/* Категории в ляво */}
         <Col xs={24} md={8} lg={6}>

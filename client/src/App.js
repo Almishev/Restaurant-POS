@@ -8,28 +8,35 @@ import Register from "./pages/Register";
 import BillsPage from "./pages/BillsPage";
 import CutomerPage from "./pages/CutomerPage";
 import CategoriesPage from "./pages/CategoriesPage";
+import TablesPage from "./pages/TablesPage";
+import axios from "axios";
+import { useEffect, useState } from "react";
+import { message } from "antd";
 
 function App() {
   return (
     <>
       <BrowserRouter>
         <Routes>
+          <Route path="/" element={<Navigate to="/tables" />} />
           <Route
-            path="/"
+            path="/order"
             element={
               <ProtectedRoute>
-                <Homepage />
+                <TableProtectedRoute>
+                  <Homepage />
+                </TableProtectedRoute>
               </ProtectedRoute>
             }
           />
           <Route
-  path="/categories"
-  element={
-    <ProtectedRoute>
-      <CategoriesPage />
-    </ProtectedRoute>
-  }
-/>
+            path="/categories"
+            element={
+              <ProtectedRoute>
+                <CategoriesPage />
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="/items"
             element={
@@ -62,6 +69,14 @@ function App() {
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/tables"
+            element={
+              <ProtectedRoute>
+                <TablesPage />
+              </ProtectedRoute>
+            }
+          />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
         </Routes>
@@ -78,4 +93,37 @@ export function ProtectedRoute({ children }) {
   } else {
     return <Navigate to="/login" />;
   }
+}
+
+function TableProtectedRoute({ children }) {
+  const [loading, setLoading] = useState(true);
+  const [hasTable, setHasTable] = useState(false);
+  const user = localStorage.getItem("auth") ? JSON.parse(localStorage.getItem("auth")) : null;
+
+  useEffect(() => {
+    const checkTable = async () => {
+      if (user && user.userId) {
+        try {
+          const res = await axios.get(`/api/users/get-current-table/${user.userId}`);
+          if (res.data.currentTableId) {
+            setHasTable(true);
+          } else {
+            setHasTable(false);
+          }
+        } catch {
+          setHasTable(false);
+        }
+      } else {
+        setHasTable(false);
+      }
+      setLoading(false);
+    };
+    checkTable();
+    // eslint-disable-next-line
+  }, []);
+
+  if (loading) return null;
+  if (hasTable) return children;
+  message.warning("Няма избрана маса, моля първо изберете маса");
+  return <Navigate to="/tables" />;
 }

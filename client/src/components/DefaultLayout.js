@@ -3,22 +3,24 @@ import { useSelector } from "react-redux";
 import { Layout, Menu } from "antd";
 import { Link, useNavigate } from "react-router-dom";
 import {FolderOpenOutlined,
+  TableOutlined,
   MenuUnfoldOutlined,
+  ProfileOutlined,
   MenuFoldOutlined,
   UserOutlined,
   LogoutOutlined,
-  HomeOutlined,
   CopyOutlined,
   UnorderedListOutlined,
   ShoppingCartOutlined,
 } from "@ant-design/icons";
 import "../styles/DefaultLayout.css";
 import Spinner from "./Spinner";
+import axios from "axios";
 const { Header, Sider, Content } = Layout;
 
 const DefaultLayout = ({ children }) => {
   const navigate = useNavigate();
-  const { cartItems, loading } = useSelector((state) => state.rootReducer);
+  const { cartItems, loading, totalAmount } = useSelector((state) => state.rootReducer);
   const [collapsed, setCollapsed] = useState(false);
 
   const toggle = () => {
@@ -26,8 +28,19 @@ const DefaultLayout = ({ children }) => {
   };
   //to get localstorage data
   useEffect(() => {
-    localStorage.setItem("cartItems", JSON.stringify(cartItems));
-  }, [cartItems]);
+    const selectedTable = localStorage.getItem("selectedTable")
+      ? JSON.parse(localStorage.getItem("selectedTable"))
+      : null;
+    const cartKey = selectedTable ? `cartItems_${selectedTable._id}` : "cartItems";
+    localStorage.setItem(cartKey, JSON.stringify(cartItems));
+    if (selectedTable) {
+      axios.put("/api/tables/update-table-cart", {
+        tableId: selectedTable._id,
+        cartItems,
+        totalAmount: typeof totalAmount !== "undefined" ? totalAmount : 0,
+      });
+    }
+  }, [cartItems, totalAmount]);
 
   return (
     <Layout>
@@ -41,8 +54,8 @@ const DefaultLayout = ({ children }) => {
           mode="inline"
           defaultSelectedKeys={window.location.pathname}
         >
-          <Menu.Item key="/" icon={<HomeOutlined />}>
-            <Link to="/">Начало</Link>
+          <Menu.Item key="/" icon={<ProfileOutlined />}>
+            <Link to="/order">Поръчка</Link>
           </Menu.Item>
           <Menu.Item key="/bills" icon={<CopyOutlined />}>
             <Link to="/bills">Сметки</Link>
@@ -55,6 +68,9 @@ const DefaultLayout = ({ children }) => {
           </Menu.Item>
           <Menu.Item key="/customers" icon={<UserOutlined />}>
             <Link to="/customers">Клиенти</Link>
+          </Menu.Item>
+          <Menu.Item key="/tables" icon={<TableOutlined />}>
+            <Link to="/tables">Маси</Link>
           </Menu.Item>
           <Menu.Item
             key="/logout"

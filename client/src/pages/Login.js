@@ -17,6 +17,7 @@ const Login = () => {
       dispatch({ type: "HIDE_LOADING" });
       message.success("Успешно влизане");
       localStorage.setItem("auth", JSON.stringify(res.data));
+      localStorage.removeItem("selectedTable");
       navigate("/");
     } catch (error) {
       dispatch({ type: "HIDE_LOADING" });

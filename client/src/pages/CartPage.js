@@ -9,12 +9,16 @@ import {
   MinusCircleOutlined,
 } from "@ant-design/icons";
 import { Table, Button, Modal, message, Form, Input, Select } from "antd";
+import SelectedTableInfo from "../components/SelectedTableInfo";
+
 const CartPage = () => {
   const [subTotal, setSubTotal] = useState(0);
   const [billPopup, setBillPopup] = useState(false);
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { cartItems } = useSelector((state) => state.rootReducer);
+  const [selectedTableName, setSelectedTableName] = useState("");
+
   //handle increament
   const handleIncreament = (record) => {
     dispatch({
@@ -75,6 +79,24 @@ const CartPage = () => {
     setSubTotal(temp);
   }, [cartItems]);
 
+  useEffect(() => {
+    const fetchSelectedTable = async () => {
+      const user = localStorage.getItem("auth") ? JSON.parse(localStorage.getItem("auth")) : null;
+      if (user && user.userId) {
+        // Вземи избраната маса за потребителя
+        const res = await axios.get(`/api/users/get-current-table/${user.userId}`);
+        const tableId = res.data.currentTableId;
+        if (tableId) {
+          // Вземи името на масата
+          const tablesRes = await axios.get("/api/tables/get-tables");
+          const table = tablesRes.data.find((t) => t._id === tableId);
+          setSelectedTableName(table ? table.name : "");
+        }
+      }
+    };
+    fetchSelectedTable();
+  }, []);
+
   //handleSubmit
   const handleSubmit = async (value) => {
     try {
@@ -95,6 +117,7 @@ const CartPage = () => {
   };
   return (
     <DefaultLayout>
+      <SelectedTableInfo />
       <h1>Количка</h1>
       <Table columns={columns} dataSource={cartItems} bordered />
       <div className="d-flex flex-column align-items-end">

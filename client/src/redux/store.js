@@ -9,11 +9,14 @@ const finalReducer = combineReducers({
   rootReducer,
 });
 
+// Зареждаме количката и сумата по избрана маса
+const selectedTable = localStorage.getItem("selectedTable")
+  ? JSON.parse(localStorage.getItem("selectedTable"))
+  : null;
 const intialState = {
   rootReducer: {
-    cartItems: localStorage.getItem("cartItems")
-      ? JSON.parse(localStorage.getItem("cartItems"))
-      : [],
+    cartItems: selectedTable && selectedTable.cartItems ? selectedTable.cartItems : [],
+    totalAmount: selectedTable && selectedTable.totalAmount ? selectedTable.totalAmount : 0,
   },
 };
 const middleware = [thunk];
