@@ -108,26 +108,55 @@ const CartPage = () => {
         userId: JSON.parse(localStorage.getItem("auth"))._id,
       };
       await axios.post("/api/bills/add-bills", newObject);
-      message.success("Bill Generated");
+      message.success("Сметката е генерирана");
       navigate("/bills");
     } catch (error) {
-      message.error("Something went wrong");
+      message.error("Нещо се обърка!");
       console.log(error);
     }
   };
+
+  // Изпращане на поръчка към кухнята
+  const handleSendToKitchen = async () => {
+    try {
+      if (!selectedTableName) {
+        message.error("Няма избрана маса!");
+        return;
+      }
+      if (cartItems.length === 0) {
+        message.error("Количката е празна!");
+        return;
+      }
+      // Подготвяме артикули без цени
+      const items = cartItems.map(item => ({ name: item.name, quantity: item.quantity }));
+      await axios.post("/api/kitchen/send-order", {
+        tableName: selectedTableName,
+        items,
+      });
+      message.success("Поръчката е изпратена към кухнята!");
+      // Може да изчистим количката тук, ако желаеш
+    } catch (error) {
+      message.error("Грешка при изпращане към кухнята!");
+    }
+  };
+
   return (
     <DefaultLayout>
       <SelectedTableInfo />
       <h1>Количка</h1>
       <Table columns={columns} dataSource={cartItems} bordered />
-      <div className="d-flex flex-column align-items-end">
-        <hr />
-        <h3>
-          Субтотал : <b> {subTotal}</b> лв
-        </h3>
-        <Button type="primary" onClick={() => setBillPopup(true)}>
-          Генерирай сметка
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 24 }}>
+        <Button type="default" onClick={handleSendToKitchen}>
+          Изпрати към кухнята
         </Button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+          <h3 style={{ margin: 0 }}>
+            Субтотал : <b>{subTotal}</b> лв
+          </h3>
+          <Button type="primary" onClick={() => setBillPopup(true)}>
+            Генерирай сметка
+          </Button>
+        </div>
       </div>
       <Modal
         title="Създай сметка"

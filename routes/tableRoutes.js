@@ -15,8 +15,8 @@ router.get("/get-tables", async (req, res) => {
 // POST нова маса
 router.post("/add-table", async (req, res) => {
   try {
-    const { name } = req.body;
-    const newTable = new Table({ name });
+    const { name, createdBy } = req.body;
+    const newTable = new Table({ name, createdBy });
     await newTable.save();
     res.status(201).json({ message: "Масата е добавена успешно!" });
   } catch (error) {
@@ -36,6 +36,21 @@ router.put("/update-table-cart", async (req, res) => {
     res.status(200).json(updated);
   } catch (error) {
     res.status(400).json({ message: "Грешка при обновяване на масата." });
+  }
+});
+
+// PUT обнови pendingItems и сумата на маса
+router.put("/update-table-pending-items", async (req, res) => {
+  try {
+    const { tableId, pendingItems, totalAmount } = req.body;
+    const updated = await Table.findByIdAndUpdate(
+      tableId,
+      { pendingItems, totalAmount },
+      { new: true }
+    );
+    res.status(200).json(updated);
+  } catch (error) {
+    res.status(400).json({ message: "Грешка при обновяване на поръчката (pendingItems)." });
   }
 });
 

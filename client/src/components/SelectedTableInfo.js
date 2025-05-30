@@ -5,21 +5,15 @@ const SelectedTableInfo = () => {
   const [selectedTableName, setSelectedTableName] = useState("");
 
   useEffect(() => {
-    const fetchSelectedTable = async () => {
+    const fetchMyTable = async () => {
       const user = localStorage.getItem("auth") ? JSON.parse(localStorage.getItem("auth")) : null;
       if (user && user.userId) {
-        // Вземи избраната маса за потребителя
-        const res = await axios.get(`/api/users/get-current-table/${user.userId}`);
-        const tableId = res.data.currentTableId;
-        if (tableId) {
-          // Вземи името на масата
-          const tablesRes = await axios.get("/api/tables/get-tables");
-          const table = tablesRes.data.find((t) => t._id === tableId);
-          setSelectedTableName(table ? table.name : "");
-        }
+        const tablesRes = await axios.get("/api/tables/get-tables");
+        const myTable = tablesRes.data.find((t) => t.createdBy === user.userId);
+        setSelectedTableName(myTable ? myTable.name : "");
       }
     };
-    fetchSelectedTable();
+    fetchMyTable();
   }, []);
 
   if (!selectedTableName) return null;

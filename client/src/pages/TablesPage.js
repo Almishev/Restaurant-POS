@@ -26,6 +26,10 @@ const TablesPage = () => {
     fetchTables();
   }, []);
 
+  // Филтрирай масите, които са създадени от текущия user
+  const user = localStorage.getItem("auth") ? JSON.parse(localStorage.getItem("auth")) : null;
+  const myTables = user ? tables.filter((t) => t.createdBy === user.userId) : [];
+
   const showModal = () => {
     setIsModalVisible(true);
   };
@@ -37,7 +41,8 @@ const TablesPage = () => {
 
   const onFinish = async (values) => {
     try {
-      await axios.post("/api/tables/add-table", values);
+      const user = localStorage.getItem("auth") ? JSON.parse(localStorage.getItem("auth")) : null;
+      await axios.post("/api/tables/add-table", { ...values, createdBy: user ? user.userId : "" });
       message.success("Масата е добавена успешно!");
       setIsModalVisible(false);
       form.resetFields();
@@ -47,33 +52,14 @@ const TablesPage = () => {
     }
   };
 
-  const handleSelectTable = async (record) => {
-    try {
-      const user = localStorage.getItem("auth") ? JSON.parse(localStorage.getItem("auth")) : null;
-      if (!user || !user.userId) {
-        message.error("Няма информация за потребителя!");
-        return;
-      }
-      // Задай избраната маса в базата
-      await axios.post("/api/users/set-current-table", {
-        userId: user.userId,
-        tableId: record._id,
-      });
-      message.success(`Избрана маса: ${record.name}`);
-      window.location.href = "/order";
-    } catch (error) {
-      message.error("Грешка при избор на маса!");
-    }
-  };
-
   const columns = [
     { title: "Маса", dataIndex: "name", key: "name" },
     {
       title: "Действие",
       key: "actions",
       render: (_, record) => (
-        <Button type="primary" onClick={() => handleSelectTable(record)}>
-          Избери
+        <Button type="primary" onClick={() => navigate(`/order/${record._id}`)}>
+          Работи на тази маса
         </Button>
       ),
     },
@@ -82,13 +68,13 @@ const TablesPage = () => {
   return (
     <DefaultLayout>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <h1>Маси</h1>
+        <h1>Моите маси</h1>
         <Button type="primary" onClick={showModal}>
           Добави маса
         </Button>
       </div>
       <Table
-        dataSource={tables}
+        dataSource={myTables}
         columns={columns}
         rowKey="_id"
         loading={loading}

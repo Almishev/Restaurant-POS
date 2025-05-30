@@ -26,6 +26,7 @@ app.use("/api/users", require("./routes/userRoutes"));
 app.use("/api/bills", require("./routes/billsRoute"));
 app.use("/api/categories", require("./routes/categoryRoutes"));
 app.use("/api/tables", require("./routes/tableRoutes"));
+app.use("/api/kitchen", require("./routes/kitchenRoutes"));
 
 //port
 const PORT = process.env.PORT || 8081;

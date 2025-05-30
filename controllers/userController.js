@@ -6,15 +6,20 @@ const loginController = async (req, res) => {
     const { userId, password } = req.body;
     const user = await userModal.findOne({ userId, password, verified: true });
     if (user) {
-      res.status(200).send(user);
+      res.status(200).json({
+        name: user.name,
+        userId: user.userId
+      });
     } else {
-      res.json({
-        message: "Login Fail",
-        user,
+      res.status(400).json({
+        message: "Грешка при вход",
       });
     }
   } catch (error) {
     console.log(error);
+    res.status(500).json({
+      message: "Възникна грешка при вход",
+    });
   }
 };
 

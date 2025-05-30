@@ -7,7 +7,19 @@ const tableSchema = mongoose.Schema(
       required: true,
       unique: true,
     },
+    createdBy: {
+      type: String,
+      required: false,
+    },
     cartItems: [
+      {
+        itemId: String,
+        name: String,
+        price: Number,
+        quantity: Number,
+      }
+    ],
+    pendingItems: [
       {
         itemId: String,
         name: String,

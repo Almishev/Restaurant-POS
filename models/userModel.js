@@ -18,10 +18,6 @@ const userSchema = mongoose.Schema(
     verified: {
       type: Boolean,
     },
-    currentTableId: {
-      type: String,
-      default: null,
-    },
   },
   { timestamp: true }
 );
