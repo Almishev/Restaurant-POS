@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useSelector } from "react-redux";
-import { Layout, Menu } from "antd";
+import { Layout, Menu, message } from "antd";
 import { Link, useNavigate } from "react-router-dom";
 import {FolderOpenOutlined,
   RedoOutlined,
@@ -56,7 +56,20 @@ const DefaultLayout = ({ children }) => {
           defaultSelectedKeys={window.location.pathname}
         >
           <Menu.Item key="/" icon={<ProfileOutlined />}>
-            <Link to="/order">Поръчка</Link>
+            <span
+              onClick={() => {
+                const selectedTable = localStorage.getItem("selectedTable");
+                if (!selectedTable) {
+                  message.error("Няма избрана маса!");
+                  navigate("/tables");
+                } else {
+                  navigate("/order/" + JSON.parse(selectedTable)._id);
+                }
+              }}
+              style={{ cursor: 'pointer' }}
+            >
+              Поръчка
+            </span>
           </Menu.Item>
           <Menu.Item key="/bills" icon={<CopyOutlined />}>
             <Link to="/bills">Сметки</Link>

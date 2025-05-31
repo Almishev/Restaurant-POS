@@ -6,10 +6,7 @@ const billSchema = mongoose.Schema(
       type: String,
       required: true,
     },
-    customerNumber: {
-      type: Number,
-      required: true,
-    },
+  
     totalAmount: {
       type: Number,
       required: true,

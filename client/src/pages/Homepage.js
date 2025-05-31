@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from "react";
 import DefaultLayout from "./../components/DefaultLayout";
 import axios from "axios";
-import { Row, Col, message, Table, Button } from "antd";
+import { Row, Col, message, Table, Button, Modal, Form, Input, Select } from "antd";
 import { useDispatch } from "react-redux";
 import { useNavigate, useParams } from "react-router-dom";
+import { CheckCircleTwoTone } from '@ant-design/icons';
 
 const Homepage = () => {
   const { tableId } = useParams();
@@ -14,6 +15,9 @@ const Homepage = () => {
   const [pendingItems, setPendingItems] = useState([]);
   const [cartItems, setCartItems] = useState([]);
   const [totalAmount, setTotalAmount] = useState(0);
+  const [kitchenOrders, setKitchenOrders] = useState([]);
+  const [billPopup, setBillPopup] = useState(false);
+  const [form] = Form.useForm();
   const dispatch = useDispatch();
   const navigate = useNavigate();
 
@@ -72,6 +76,19 @@ const Homepage = () => {
     fetchItems();
   }, []);
 
+  // Зареждане на статусите от кухнята (готови артикули)
+  useEffect(() => {
+    const fetchKitchenOrders = async () => {
+      try {
+        const res = await axios.get('/api/kitchen/orders');
+        setKitchenOrders(res.data);
+      } catch {}
+    };
+    fetchKitchenOrders();
+    const interval = setInterval(fetchKitchenOrders, 5000); // auto-refresh
+    return () => clearInterval(interval);
+  }, []);
+
   // Добавяне на артикул към pendingItems
   const handleAddToCart = async (item) => {
     let updatedPending;
@@ -119,9 +136,11 @@ const Homepage = () => {
   // Изпрати към кухнята (само pendingItems)
   const handleSendToKitchen = async () => {
     try {
+      const user = localStorage.getItem("auth") ? JSON.parse(localStorage.getItem("auth")) : null;
       await axios.post("/api/kitchen/send-order", {
         tableName: table.name,
         items: pendingItems,
+        waiterName: user ? user.name : ""
       });
       // Мести pendingItems в cartItems и изчисти pendingItems
       await axios.put("/api/tables/update-table-cart", {
@@ -141,20 +160,50 @@ const Homepage = () => {
   const handleGenerateBillClick = async () => {
     if (pendingItems.length > 0) {
       await handleSendToKitchen();
-      // handleSendToKitchen вече ще навигира към /tables, така че може да се върнеш тук ако искаш да покажеш модал за сметка
-      // Ако искаш да останеш на страницата, премахни navigate от handleSendToKitchen
-    } else {
-      handleGenerateBill();
+    }
+    setBillPopup(true);
+  };
+
+  // Генериране на сметка
+  const handleSubmitBill = async (value) => {
+    try {
+      const allItems = [...cartItems, ...pendingItems];
+      const total = allItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
+      const newObject = {
+        ...value,
+        customerName: value.customerName || table.name,
+        cartItems: allItems,
+        subTotal: total,
+        totalAmount: Number(total),
+        userId: JSON.parse(localStorage.getItem("auth"))._id,
+        tableId: tableId,
+      };
+      await axios.post("/api/bills/add-bills", newObject);
+      message.success("Сметката е генерирана");
+      setBillPopup(false);
+      // Изчистване на количката за масата
+      await axios.put("/api/tables/update-table-cart", {
+        tableId,
+        cartItems: [],
+        totalAmount: 0,
+      });
+      await updatePendingInDB([]);
+      await fetchTable();
+      navigate("/bills");
+    } catch (error) {
+      message.error("Нещо се обърка!");
+      console.log(error);
     }
   };
 
-  // Placeholder за handleGenerateBill, ако липсва
-  const handleGenerateBill = () => {
-    message.info("Генериране на сметка (функционалност по избор)");
-    // Тук може да добавиш логика за реално генериране на сметка
-  };
-
-  if (!table) return null;
+  if (!table) {
+    return (
+      <div style={{ textAlign: "center", marginTop: 100 }}>
+        <h2>Няма избрана маса!</h2>
+        <Button type="primary" onClick={() => navigate("/tables")}>Избери маса</Button>
+      </div>
+    );
+  }
 
   const cartColumns = [
     { title: "Име", dataIndex: "name" },
@@ -186,7 +235,14 @@ const Homepage = () => {
     { title: "Име", dataIndex: "name" },
     { title: "Цена", dataIndex: "price" },
     { title: "Количество", dataIndex: "quantity" },
-    { title: "Статус", render: () => <span style={{ color: '#888' }}>Изпратено</span> },
+    { title: "Статус", render: (_, record) => {
+      // Проверка дали този артикул е бил готов в кухнята (дори ако поръчката вече е изтрита)
+      const isDone = kitchenOrders.some(order =>
+        order.tableName === table.name &&
+        order.items.some(item => item.name === record.name && item.done === true)
+      );
+      return isDone ? <span style={{ color: 'green' }}><CheckCircleTwoTone twoToneColor="#52c41a" /> Готово</span> : <span style={{ color: '#888' }}>Изпратено</span>;
+    } },
   ];
 
   // Изчисли общата сума за всички артикули (изпратени + текущи)
@@ -274,6 +330,40 @@ const Homepage = () => {
           </div>
         </Col>
       </Row>
+      <Modal
+        title="Създай сметка"
+        visible={billPopup}
+        onCancel={() => setBillPopup(false)}
+        footer={false}
+      >
+        <Form form={form} layout="vertical" onFinish={handleSubmitBill} initialValues={{ customerName: table.name }}>
+          <Form.Item name="customerName" label="Име на клиент">
+            <Input />
+          </Form.Item>
+          <Form.Item name="customerNumber" label="Контакт">
+            <Input />
+          </Form.Item>
+          <Form.Item name="paymentMode" label="Метод на плащане" style={{ minWidth: 220 }}>
+            <Select style={{ minWidth: 220 }}>
+              <Select.Option value="cash">Брой</Select.Option>
+              <Select.Option value="card">Карта</Select.Option>
+            </Select>
+          </Form.Item>
+          <div className="bill-it">
+            <h5>
+              Сума : <b>{grandTotal}</b>
+            </h5>
+            <h3>
+              Обща сума - <b>{grandTotal}</b>
+            </h3>
+          </div>
+          <div className="d-flex justify-content-end">
+            <Button type="primary" htmlType="submit">
+              Генерирай сметка
+            </Button>
+          </div>
+        </Form>
+      </Modal>
     </DefaultLayout>
   );
 };

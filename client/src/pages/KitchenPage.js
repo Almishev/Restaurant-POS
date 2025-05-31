@@ -1,9 +1,22 @@
-import React, { useState, useEffect } from "react";
-import { Table, Card, Tag, Spin, Empty } from "antd";
+import React, { useState, useEffect, useRef } from "react";
+import { Table, Card, Tag, Spin, Empty, Button } from "antd";
+import ReactToPrint from "react-to-print";
+
+// Компонент за бележката
+const KitchenPrintOrder = React.forwardRef(({ record }, ref) => (
+  <div ref={ref} style={{ padding: 24, fontSize: 18 }}>
+    <h2 style={{ textAlign: 'center', marginBottom: 16 }}>КУХНЯ</h2>
+    <div><b>Маса:</b> {record.table}</div>
+    <div><b>Артикул:</b> {record.name}</div>
+    <div><b>Количество:</b> {record.quantity}</div>
+    <div style={{ marginTop: 16, fontSize: 14, color: '#888' }}>--- Приятна работа! ---</div>
+  </div>
+));
 
 const KitchenPage = () => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const printRefs = useRef({});
 
   useEffect(() => {
     const fetchOrders = async () => {
@@ -20,10 +33,38 @@ const KitchenPage = () => {
     fetchOrders();
   }, []);
 
-  const handleOrderDone = async (orderId) => {
+  // Групирай всички артикули по маса и име, само ако done: false
+  const grouped = {};
+  orders.forEach((order) => {
+    const table = order.tableName;
+    order.items.filter(item => !item.done).forEach((item) => {
+      const key = table + "__" + item.name;
+      if (!grouped[key]) {
+        grouped[key] = {
+          table,
+          name: item.name,
+          quantity: 0,
+          orderIds: [],
+        };
+      }
+      grouped[key].quantity += item.quantity;
+      grouped[key].orderIds.push({ orderId: order._id, itemName: item.name });
+    });
+  });
+  const dataSource = Object.values(grouped).map((g, idx) => ({ ...g, key: idx }));
+
+  // Отбележи артикул като готов (done)
+  const handleItemDone = async (orderId, itemName) => {
     try {
-      await fetch(`/api/kitchen/orders/${orderId}`, { method: 'DELETE' });
-      setOrders((prev) => prev.filter((order) => order._id !== orderId));
+      await fetch(`/api/kitchen/orders/${orderId}/done`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ itemName }),
+      });
+      // Презареди поръчките
+      const response = await fetch("/api/kitchen/orders");
+      const data = await response.json();
+      setOrders(data);
     } catch {
       // Може да добавиш съобщение за грешка
     }
@@ -32,44 +73,55 @@ const KitchenPage = () => {
   const columns = [
     {
       title: "Маса",
-      dataIndex: "tableName",
-      key: "tableName",
+      dataIndex: "table",
+      key: "table",
       align: "center",
       render: (text) => <Tag color="blue">{text}</Tag>,
     },
     {
-      title: "Артикули",
-      dataIndex: "items",
-      key: "items",
+      title: "Артикул",
+      dataIndex: "name",
+      key: "name",
       align: "center",
-      render: (items) => (
-        <ul style={{ paddingLeft: 16, textAlign: "left" }}>
-          {items.map((item, idx) => (
-            <li key={idx}>
-              {item.name} <b>x{item.quantity}</b>
-            </li>
-          ))}
-        </ul>
-      ),
     },
     {
-      title: "Време",
-      dataIndex: "createdAt",
-      key: "createdAt",
+      title: "Количество",
+      dataIndex: "quantity",
+      key: "quantity",
       align: "center",
-      render: (createdAt) => new Date(createdAt).toLocaleString(),
+    },
+    {
+      title: "Сервитьор",
+      dataIndex: "waiterName",
+      key: "waiterName",
+      align: "center",
+      render: (_, record) => {
+        // Вземи името на сервитьора от първата orderId
+        const order = orders.find(o => o._id === record.orderIds[0].orderId);
+        return order && order.waiterName ? order.waiterName : "-";
+      }
     },
     {
       title: "Действие",
       key: "action",
       align: "center",
       render: (_, record) => (
-        <button
-          style={{ background: '#52c41a', color: 'white', border: 'none', borderRadius: 4, padding: '4px 12px', cursor: 'pointer' }}
-          onClick={() => handleOrderDone(record._id)}
-        >
-          Готово
-        </button>
+        <div style={{ display: 'flex', gap: 8, justifyContent: 'center' }}>
+          <Button
+            style={{ background: '#52c41a', color: 'white', border: 'none', borderRadius: 4, padding: '4px 12px', cursor: 'pointer' }}
+            onClick={() => handleItemDone(record.orderIds[0].orderId, record.name)}
+          >
+            Готово
+          </Button>
+          <ReactToPrint
+            trigger={() => (
+              <Button style={{ background: '#1890ff', color: 'white', border: 'none', borderRadius: 4, padding: '4px 12px' }}>
+                Печат
+              </Button>
+            )}
+            content={() => printRefs.current[record.key]}
+          />
+        </div>
       ),
     },
   ];
@@ -81,16 +133,27 @@ const KitchenPage = () => {
           <div style={{ textAlign: "center", padding: 40 }}>
             <Spin size="large" />
           </div>
-        ) : orders.length === 0 ? (
-          <Empty description="Няма изпратени поръчки към кухнята." />
+        ) : dataSource.length === 0 ? (
+          <Empty description="Няма изпратени артикули към кухнята." />
         ) : (
-          <Table
-            dataSource={orders.map((order) => ({ ...order, key: order._id }))}
-            columns={columns}
-            pagination={false}
-            bordered
-            style={{ background: "white" }}
-          />
+          <>
+            <Table
+              dataSource={dataSource}
+              columns={columns}
+              pagination={false}
+              bordered
+              style={{ background: "white" }}
+            />
+            {/* Скрити компоненти за печат */}
+            {dataSource.map(record => (
+              <div style={{ position: 'absolute', left: -9999, top: 0 }} key={record.key}>
+                <KitchenPrintOrder
+                  ref={el => printRefs.current[record.key] = el}
+                  record={record}
+                />
+              </div>
+            ))}
+          </>
         )}
       </Card>
     </div>
