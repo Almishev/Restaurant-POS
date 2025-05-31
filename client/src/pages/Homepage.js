@@ -137,9 +137,15 @@ const Homepage = () => {
   const handleSendToKitchen = async () => {
     try {
       const user = localStorage.getItem("auth") ? JSON.parse(localStorage.getItem("auth")) : null;
+      // Добавям department към всеки item
+      const itemsWithDepartment = pendingItems.map(item => {
+        if (item.department) return item;
+        const found = itemsData.find(i => i._id === item._id);
+        return { ...item, department: found ? found.department : undefined };
+      });
       await axios.post("/api/kitchen/send-order", {
         tableName: table.name,
-        items: pendingItems,
+        items: itemsWithDepartment,
         waiterName: user ? user.name : ""
       });
       // Мести pendingItems в cartItems и изчисти pendingItems
@@ -188,8 +194,9 @@ const Homepage = () => {
         totalAmount: 0,
       });
       await updatePendingInDB([]);
-      await fetchTable();
-      navigate("/bills");
+      await axios.delete(`/api/tables/delete-table/${tableId}`);
+      localStorage.removeItem("selectedTable");
+      navigate("/tables");
     } catch (error) {
       message.error("Нещо се обърка!");
       console.log(error);

@@ -167,6 +167,12 @@ const ItemPage = () => {
                 ))}
               </Select>
             </Form.Item>
+            <Form.Item name="department" label="Отдел" rules={[{ required: true, message: "Избери отдел!" }]}>
+              <Select>
+                <Select.Option value="kitchen">Кухня</Select.Option>
+                <Select.Option value="bar">Бар</Select.Option>
+              </Select>
+            </Form.Item>
             <div className="d-flex justify-content-end">
               <Button type="primary" htmlType="submit">
                 Запази

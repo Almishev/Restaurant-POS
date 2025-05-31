@@ -8,6 +8,7 @@ const kitchenOrderSchema = mongoose.Schema({
       name: String,
       quantity: Number,
       done: { type: Boolean, default: false },
+      department: String,
     }
   ],
   status: { type: String, default: "ново" },

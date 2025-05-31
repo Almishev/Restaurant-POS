@@ -3,17 +3,17 @@ import { Table, Card, Tag, Spin, Empty, Button } from "antd";
 import ReactToPrint from "react-to-print";
 
 // Компонент за бележката
-const KitchenPrintOrder = React.forwardRef(({ record }, ref) => (
+const BarPrintOrder = React.forwardRef(({ record }, ref) => (
   <div ref={ref} style={{ padding: 24, fontSize: 18 }}>
-    <h2 style={{ textAlign: 'center', marginBottom: 16 }}>КУХНЯ</h2>
+    <h2 style={{ textAlign: 'center', marginBottom: 16 }}>БАР</h2>
     <div><b>Маса:</b> {record.table}</div>
     <div><b>Артикул:</b> {record.name}</div>
     <div><b>Количество:</b> {record.quantity}</div>
-    <div style={{ marginTop: 16, fontSize: 14, color: '#888' }}>--- Приятна работа! ---</div>
+    <div style={{ marginTop: 16, fontSize: 14, color: '#888' }}>--- Наздраве! ---</div>
   </div>
 ));
 
-const KitchenPage = () => {
+const BarPage = () => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const printRefs = useRef({});
@@ -33,11 +33,11 @@ const KitchenPage = () => {
     fetchOrders();
   }, []);
 
-  // Групирай всички артикули по маса и име, само ако done: false
+  // Групирай всички бар артикули по маса и име, само ако done: false
   const grouped = {};
   orders.forEach((order) => {
     const table = order.tableName;
-    order.items.filter(item => !item.done && item.department === 'kitchen').forEach((item) => {
+    order.items.filter(item => !item.done && item.department === 'bar').forEach((item) => {
       const key = table + "__" + item.name;
       if (!grouped[key]) {
         grouped[key] = {
@@ -128,13 +128,13 @@ const KitchenPage = () => {
 
   return (
     <div style={{ maxWidth: 900, margin: "0 auto", padding: 24 }}>
-      <Card title="Поръчки към кухнята" bordered={false} style={{ boxShadow: "0 2px 8px #f0f1f2" }}>
+      <Card title="Поръчки към бара" bordered={false} style={{ boxShadow: "0 2px 8px #f0f1f2" }}>
         {loading ? (
           <div style={{ textAlign: "center", padding: 40 }}>
             <Spin size="large" />
           </div>
         ) : dataSource.length === 0 ? (
-          <Empty description="Няма изпратени артикули към кухнята." />
+          <Empty description="Няма изпратени артикули към бара." />
         ) : (
           <>
             <Table
@@ -147,7 +147,7 @@ const KitchenPage = () => {
             {/* Скрити компоненти за печат */}
             {dataSource.map(record => (
               <div style={{ position: 'absolute', left: -9999, top: 0 }} key={record.key}>
-                <KitchenPrintOrder
+                <BarPrintOrder
                   ref={el => printRefs.current[record.key] = el}
                   record={record}
                 />
@@ -160,4 +160,4 @@ const KitchenPage = () => {
   );
 };
 
-export default KitchenPage; 
+export default BarPage; 

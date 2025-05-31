@@ -14,7 +14,11 @@ const itemSchema = mongoose.Schema(
       type: String,
       required: true,
     },
-    
+    department: {
+      type: String,
+      enum: ["kitchen", "bar"],
+      required: true,
+    },
   },
   { timestamp: true }
 );

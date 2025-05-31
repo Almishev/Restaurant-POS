@@ -3,7 +3,9 @@ import { useSelector } from "react-redux";
 import { Layout, Menu, message } from "antd";
 import { Link, useNavigate } from "react-router-dom";
 import {FolderOpenOutlined,
+  
   RedoOutlined,
+  RestOutlined,
   TableOutlined,
   MenuUnfoldOutlined,
   ProfileOutlined,
@@ -88,6 +90,9 @@ const DefaultLayout = ({ children }) => {
           </Menu.Item>
           <Menu.Item key="/kitchen" icon={<RedoOutlined />}>
             <Link to="/kitchen">Кухня</Link>
+          </Menu.Item>
+          <Menu.Item key="/bar" icon={<RestOutlined/>}>
+            <Link to="/bar">Бар</Link>
           </Menu.Item>
           <Menu.Item
             key="/logout"

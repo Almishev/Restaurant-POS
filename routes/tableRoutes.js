@@ -54,4 +54,14 @@ router.put("/update-table-pending-items", async (req, res) => {
   }
 });
 
+// DELETE маса по id
+router.delete("/delete-table/:id", async (req, res) => {
+  try {
+    await Table.findByIdAndDelete(req.params.id);
+    res.status(200).json({ message: "Масата е изтрита успешно!" });
+  } catch (error) {
+    res.status(400).json({ message: "Грешка при изтриване на масата!" });
+  }
+});
+
 module.exports = router; 

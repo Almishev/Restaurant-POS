@@ -10,6 +10,7 @@ import CutomerPage from "./pages/CutomerPage";
 import CategoriesPage from "./pages/CategoriesPage";
 import TablesPage from "./pages/TablesPage";
 import KitchenPage from "./pages/KitchenPage";
+import BarPage from "./pages/BarPage";
 import axios from "axios";
 import { useEffect, useState } from "react";
 import { message } from "antd";
@@ -94,6 +95,14 @@ function App() {
           />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route
+            path="/bar"
+            element={
+              <ProtectedRoute>
+                <BarPage />
+              </ProtectedRoute>
+            }
+          />
         </Routes>
       </BrowserRouter>
     </>
