@@ -94,6 +94,9 @@ const DefaultLayout = ({ children }) => {
           <Menu.Item key="/bar" icon={<RestOutlined/>}>
             <Link to="/bar">Бар</Link>
           </Menu.Item>
+          <Menu.Item key="/reports" icon={<CopyOutlined />}>
+            <Link to="/reports">Отчети</Link>
+          </Menu.Item>
           <Menu.Item
             key="/logout"
             icon={<LogoutOutlined />}

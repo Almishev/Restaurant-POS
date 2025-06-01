@@ -11,11 +11,19 @@ import CategoriesPage from "./pages/CategoriesPage";
 import TablesPage from "./pages/TablesPage";
 import KitchenPage from "./pages/KitchenPage";
 import BarPage from "./pages/BarPage";
+import ReportsPage from "./pages/ReportsPage";
+import ReportsArchivePage from "./pages/ReportsArchivePage";
 import axios from "axios";
 import { useEffect, useState } from "react";
 import { message } from "antd";
+import { initCronJobs } from './utils/cron';
 
 function App() {
+  useEffect(() => {
+    // Инициализация на cron jobs при стартиране на приложението
+    initCronJobs();
+  }, []);
+
   return (
     <>
       <BrowserRouter>
@@ -100,6 +108,22 @@ function App() {
             element={
               <ProtectedRoute>
                 <BarPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/reports"
+            element={
+              <ProtectedRoute>
+                <ReportsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/reports-archive"
+            element={
+              <ProtectedRoute>
+                <ReportsArchivePage />
               </ProtectedRoute>
             }
           />

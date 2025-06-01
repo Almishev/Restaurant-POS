@@ -38,7 +38,18 @@ const registerController = async (req, res) => {
   }
 };
 
+// Връща всички потребители (за отчети)
+const getUsersController = async (req, res) => {
+  try {
+    const users = await userModal.find({}, { _id: 1, name: 1, userId: 1 });
+    res.json(users);
+  } catch (error) {
+    res.status(500).json({ message: "Грешка при зареждане на потребителите!" });
+  }
+};
+
 module.exports = {
   loginController,
   registerController,
+  getUsersController,
 };
