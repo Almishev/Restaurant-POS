@@ -1,12 +1,41 @@
 const billsModel = require("../models/billsModel");
 const Report = require("../models/reportModel");
 const fiscalService = require('../services/fiscalService');
+const Recipe = require('../models/recipeModel');
+const Inventory = require('../models/inventoryModel');
 
 //add items
 const addBillsController = async (req, res) => {
   try {
     const newBill = new billsModel(req.body);
     await newBill.save();
+
+    // --- Автоматично изписване на суровини по рецепта ---
+    for (const cartItem of req.body.cartItems) {
+      // cartItem._id е id на ястието (item)
+      const recipe = await Recipe.findOne({ item: cartItem._id });
+      if (recipe) {
+        for (const ing of recipe.ingredients) {
+          // Намаляваме quantity в склада с ing.quantity * cartItem.quantity
+          await Inventory.findOneAndUpdate(
+            { item: ing.inventory },
+            {
+              $inc: { quantity: -ing.quantity * cartItem.quantity },
+              $push: {
+                history: {
+                  type: 'out',
+                  amount: ing.quantity * cartItem.quantity,
+                  user: req.body.userId || 'sale',
+                  note: `Продажба на ${cartItem.name}`
+                }
+              }
+            }
+          );
+        }
+      }
+    }
+    // --- Край на автоматичното изписване ---
+
     res.send("Bill Created Successfully!");
   } catch (error) {
     res.send("something went wrong");

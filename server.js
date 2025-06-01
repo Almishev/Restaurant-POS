@@ -6,6 +6,8 @@ const dotanv = require("dotenv");
 const { bgCyan } = require("colors");
 require("colors");
 const connectDb = require("./config/config");
+const inventoryRoute = require('./routes/inventoryRoute');
+const recipeRoute = require('./routes/recipeRoute');
 //dotenv config
 dotanv.config();
 //db config
@@ -27,6 +29,8 @@ app.use("/api/bills", require("./routes/billsRoute"));
 app.use("/api/categories", require("./routes/categoryRoutes"));
 app.use("/api/tables", require("./routes/tableRoutes"));
 app.use("/api/kitchen", require("./routes/kitchenRoutes"));
+app.use('/api/inventory', inventoryRoute);
+app.use('/api/recipes', recipeRoute);
 
 //port
 const PORT = process.env.PORT || 8081;

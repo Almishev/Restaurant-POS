@@ -7,8 +7,10 @@ import {FolderOpenOutlined,
   RedoOutlined,
   RestOutlined,
   TableOutlined,
+  HddOutlined,
   MenuUnfoldOutlined,
   ProfileOutlined,
+  BookOutlined,
   MenuFoldOutlined,
   UserOutlined,
   LogoutOutlined,
@@ -100,6 +102,12 @@ const DefaultLayout = ({ children }) => {
           <Menu.Item key="/reports-archive" icon={<FileSearchOutlined />}>
   <Link to="/reports-archive">Архивирани отчети</Link>
 </Menu.Item>
+          <Menu.Item key="/inventory" icon={<HddOutlined />}>
+            <Link to="/inventory">Склад</Link>
+          </Menu.Item>
+          <Menu.Item key="/recipe" icon={<BookOutlined />}>
+            <Link to="/recipe">Рецепти</Link>
+          </Menu.Item>
           <Menu.Item
             key="/logout"
             icon={<LogoutOutlined />}

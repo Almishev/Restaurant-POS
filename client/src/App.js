@@ -12,6 +12,8 @@ import TablesPage from "./pages/TablesPage";
 import KitchenPage from "./pages/KitchenPage";
 import BarPage from "./pages/BarPage";
 import ReportsPage from "./pages/ReportsPage";
+import InventoryPage from "./pages/InventoryPage";
+import RecipePage from "./pages/RecipePage";
 import ReportsArchivePage from "./pages/ReportsArchivePage";
 import axios from "axios";
 import { useEffect, useState } from "react";
@@ -124,6 +126,22 @@ function App() {
             element={
               <ProtectedRoute>
                 <ReportsArchivePage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/inventory"
+            element={
+              <ProtectedRoute>
+                <InventoryPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/recipe"
+            element={
+              <ProtectedRoute>
+                <RecipePage />
               </ProtectedRoute>
             }
           />
