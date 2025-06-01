@@ -72,8 +72,9 @@ const ReportsPage = () => {
       setReport(res.data);
       setIsZ(true);
       message.success("Z отчетът е архивиран успешно!");
-    } catch {
-      message.error("Грешка при архивиране на Z отчета!");
+    } catch (error) {
+      const msg = error.response?.data?.message || "Грешка при архивиране на Z отчета!";
+      message.error(msg);
     }
     setLoading(false);
   };

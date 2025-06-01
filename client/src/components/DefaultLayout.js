@@ -3,7 +3,7 @@ import { useSelector } from "react-redux";
 import { Layout, Menu, message } from "antd";
 import { Link, useNavigate } from "react-router-dom";
 import {FolderOpenOutlined,
-  
+  FileSearchOutlined,
   RedoOutlined,
   RestOutlined,
   TableOutlined,
@@ -97,6 +97,9 @@ const DefaultLayout = ({ children }) => {
           <Menu.Item key="/reports" icon={<CopyOutlined />}>
             <Link to="/reports">Отчети</Link>
           </Menu.Item>
+          <Menu.Item key="/reports-archive" icon={<FileSearchOutlined />}>
+  <Link to="/reports-archive">Архивирани отчети</Link>
+</Menu.Item>
           <Menu.Item
             key="/logout"
             icon={<LogoutOutlined />}
