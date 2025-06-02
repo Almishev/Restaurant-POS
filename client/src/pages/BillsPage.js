@@ -13,25 +13,57 @@ const BillsPage = () => {
   const [billsData, setBillsData] = useState([]);
   const [popupModal, setPopupModal] = useState(false);
   const [selectedBill, setSelectedBill] = useState(null);
+  const [userRole, setUserRole] = useState("");
+  const [userId, setUserId] = useState("");
+  
+  // Get user data from localStorage
+  useEffect(() => {
+    const userData = localStorage.getItem("auth");
+    if (userData) {
+      try {
+        const parsedUser = JSON.parse(userData);
+        setUserRole(parsedUser?.role || "");
+        setUserId(parsedUser?.userId || "");
+        console.log("Данни за текущия потребител в BillsPage:", {
+          userId: parsedUser?.userId,
+          role: parsedUser?.role,
+          name: parsedUser?.name
+        });
+      } catch (error) {
+        console.error("Error parsing user data:", error);
+      }
+    }
+  }, []);
+  
   const getAllBills = async () => {
     try {
       dispatch({
         type: "SHOW_LOADING",
       });
-      const { data } = await axios.get("/api/bills/get-bills");
+      
+      console.log("Изпращам заявка с параметри:", { role: userRole, userId: userId });
+      
+      // Pass user role and ID as query parameters
+      const { data } = await axios.get("/api/bills/get-bills", {
+        params: { role: userRole, userId: userId }
+      });
+      
+      console.log(`Получени ${data.length} сметки от сървъра`);
       setBillsData(data);
       dispatch({ type: "HIDE_LOADING" });
-      console.log(data);
     } catch (error) {
       dispatch({ type: "HIDE_LOADING" });
-      console.log(error);
+      console.log("Грешка при получаване на сметки:", error);
     }
   };
   //useEffect
   useEffect(() => {
-    getAllBills();
+    // Only fetch bills when we have the user role and userId
+    if (userRole) {
+      getAllBills();
+    }
     //eslint-disable-next-line
-  }, []);
+  }, [userRole, userId]);
   //print function
   const handlePrint = useReactToPrint({
     content: () => componentRef.current,
@@ -69,6 +101,12 @@ const BillsPage = () => {
       <div className="d-flex justify-content-between">
         <h1>Списък с сметки</h1>
       </div>
+      
+      {userRole !== "admin" && (
+        <div style={{ marginBottom: '15px', padding: '10px', background: '#f0f8ff', border: '1px solid #1890ff', borderRadius: '4px' }}>
+          Показани са само сметките, издадени от Вас.
+        </div>
+      )}
 
       <Table columns={columns} dataSource={billsData} bordered />
 

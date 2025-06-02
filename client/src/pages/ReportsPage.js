@@ -12,9 +12,22 @@ const ReportsPage = () => {
   const [loading, setLoading] = useState(false);
   const [users, setUsers] = useState([]);
   const [selectedUser, setSelectedUser] = useState(null);
-  const [dates, setDates] = useState([null, null]);
-  const [isZ, setIsZ] = useState(false);
+  const [dates, setDates] = useState([null, null]);  const [isZ, setIsZ] = useState(false);
+  const [userRole, setUserRole] = useState("");
   const printRef = useRef();
+
+  useEffect(() => {
+    // Get user role from localStorage
+    const userData = localStorage.getItem("auth");
+    if (userData) {
+      try {
+        const parsedUser = JSON.parse(userData);
+        setUserRole(parsedUser?.role || "");
+      } catch (error) {
+        console.error("Error parsing user data:", error);
+      }
+    }
+  }, []);
 
   useEffect(() => {
     // Зареди всички потребители за филтър по сервитьор
@@ -129,17 +142,18 @@ const ReportsPage = () => {
             >
               Дневен отчет
             </Button>
-          </Col>
-          <Col>
+          </Col>          <Col>
             <Button type="primary" onClick={fetchReport} loading={loading}>
               Генерирай X отчет
             </Button>
           </Col>
-          <Col>
-            <Button type="primary" danger onClick={handleZReport} loading={loading}>
-              Архивирай Z отчет
-            </Button>
-          </Col>
+          {userRole === "admin" && (
+            <Col>
+              <Button type="primary" danger onClick={handleZReport} loading={loading}>
+                Архивирай Z отчет
+              </Button>
+            </Col>
+          )}
           <Col>
             {report && <PrintButton />}
           </Col>

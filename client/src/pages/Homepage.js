@@ -161,7 +161,6 @@ const Homepage = () => {
       message.error("Грешка при изпращане към кухнята!");
     }
   };
-
   // Генерирай сметка (ако има pendingItems, първо ги изпрати към кухнята)
   const handleGenerateBillClick = async () => {
     if (pendingItems.length > 0) {
@@ -174,16 +173,25 @@ const Homepage = () => {
   const handleSubmitBill = async (value) => {
     try {
       const allItems = [...cartItems, ...pendingItems];
-      const total = allItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
+      const total = allItems.reduce((sum, i) => sum + i.price * i.quantity, 0);        const userData = JSON.parse(localStorage.getItem("auth"));
+      console.log("Потребителски данни:", userData);
+      
       const newObject = {
         ...value,
         customerName: value.customerName || table.name,
         cartItems: allItems,
         subTotal: total,
         totalAmount: Number(total),
-        userId: JSON.parse(localStorage.getItem("auth"))._id,
+        userId: userData.userId, // Използваме userId, а не _id
         tableId: tableId,
       };
+      
+      // Показване на обекта, който изпращаме
+      console.log("Изпращане на данни за сметка:", { 
+        customerName: newObject.customerName,
+        total: newObject.totalAmount,
+        userId: newObject.userId 
+      });
       await axios.post("/api/bills/add-bills", newObject);
       message.success("Сметката е генерирана");
       setBillPopup(false);

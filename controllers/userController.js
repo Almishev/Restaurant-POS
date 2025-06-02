@@ -8,7 +8,8 @@ const loginController = async (req, res) => {
     if (user) {
       res.status(200).json({
         name: user.name,
-        userId: user.userId
+        userId: user.userId,
+        role: user.role
       });
     } else {
       res.status(400).json({

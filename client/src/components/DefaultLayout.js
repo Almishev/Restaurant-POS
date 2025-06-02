@@ -27,10 +27,25 @@ const DefaultLayout = ({ children }) => {
   const navigate = useNavigate();
   const { cartItems, loading, totalAmount } = useSelector((state) => state.rootReducer);
   const [collapsed, setCollapsed] = useState(false);
+  const [userRole, setUserRole] = useState("");
 
   const toggle = () => {
     setCollapsed(!collapsed);
   };
+  useEffect(() => {
+    const userData = localStorage.getItem("auth");
+    if (userData) {
+      try {
+        const parsedUser = JSON.parse(userData);
+        // Access the role directly from the parsed user data
+        setUserRole(parsedUser?.role || "");
+        console.log("User role:", parsedUser?.role);
+      } catch (error) {
+        console.error("Error parsing user data:", error);
+        setUserRole("");
+      }
+    }
+  }, []);
   //to get localstorage data
   useEffect(() => {
     const selectedTable = localStorage.getItem("selectedTable")
@@ -78,12 +93,16 @@ const DefaultLayout = ({ children }) => {
           <Menu.Item key="/bills" icon={<CopyOutlined />}>
             <Link to="/bills">Сметки</Link>
           </Menu.Item>
+           {userRole === "admin" && (
           <Menu.Item key="/items" icon={<UnorderedListOutlined />}>
             <Link to="/items">Артикули</Link>
           </Menu.Item>
+          )}
+           {userRole === "admin" && (
           <Menu.Item key="/categories" icon={<FolderOpenOutlined />}>
             <Link to="/categories">Категории</Link>
           </Menu.Item>
+          )}
           <Menu.Item key="/customers" icon={<UserOutlined />}>
             <Link to="/customers">Клиенти</Link>
           </Menu.Item>
@@ -99,15 +118,21 @@ const DefaultLayout = ({ children }) => {
           <Menu.Item key="/reports" icon={<CopyOutlined />}>
             <Link to="/reports">Отчети</Link>
           </Menu.Item>
+           {userRole === "admin" && (
           <Menu.Item key="/reports-archive" icon={<FileSearchOutlined />}>
   <Link to="/reports-archive">Архивирани отчети</Link>
 </Menu.Item>
+          )}
+ {userRole === "admin" && (
           <Menu.Item key="/inventory" icon={<HddOutlined />}>
             <Link to="/inventory">Склад</Link>
           </Menu.Item>
+          )}
+            {userRole === "admin" && (
           <Menu.Item key="/recipe" icon={<BookOutlined />}>
             <Link to="/recipe">Рецепти</Link>
           </Menu.Item>
+            )}
           <Menu.Item
             key="/logout"
             icon={<LogoutOutlined />}
@@ -121,20 +146,29 @@ const DefaultLayout = ({ children }) => {
         </Menu>
       </Sider>
       <Layout className="site-layout">
-        <Header className="site-layout-background" style={{ padding: 0 }}>
-          {React.createElement(
-            collapsed ? MenuUnfoldOutlined : MenuFoldOutlined,
-            {
-              className: "trigger",
-              onClick: toggle,
-            }
-          )}
-          <div
-            className="cart-item d-flex jusitfy-content-space-between flex-row"
-            onClick={() => navigate("/cart")}
-          >
-            <p>{cartItems.length}</p>
-            <ShoppingCartOutlined />
+        <Header className="site-layout-background" style={{ padding: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            {React.createElement(
+              collapsed ? MenuUnfoldOutlined : MenuFoldOutlined,
+              {
+                className: "trigger",
+                onClick: toggle,
+              }
+            )}
+          </div>
+          <div style={{ marginRight: '20px', color: '#1890ff', fontWeight: 'bold' }}>
+            {(() => {
+              const userData = localStorage.getItem("auth");
+              if (userData) {
+                try {
+                  const parsedUser = JSON.parse(userData);
+                  return `Здравей, ${parsedUser.name || "Потребител"}`;
+                } catch (error) {
+                  return "Здравей, Потребител";
+                }
+              }
+              return "Здравей, Потребител";
+            })()}
           </div>
         </Header>
         <Content

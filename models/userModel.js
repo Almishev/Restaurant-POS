@@ -18,6 +18,10 @@ const userSchema = mongoose.Schema(
     verified: {
       type: Boolean,
     },
+     role: {
+      type: String,
+      default: "user",
+    },
   },
   { timestamp: true }
 );

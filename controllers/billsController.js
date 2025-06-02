@@ -7,8 +7,15 @@ const Inventory = require('../models/inventoryModel');
 //add items
 const addBillsController = async (req, res) => {
   try {
+    console.log("Данни за нова сметка:", {
+      customerName: req.body.customerName,
+      totalAmount: req.body.totalAmount,
+      userId: req.body.userId
+    });
+    
     const newBill = new billsModel(req.body);
     await newBill.save();
+    console.log("Сметката е създадена успешно с ID:", newBill._id);
 
     // --- Автоматично изписване на суровини по рецепта ---
     for (const cartItem of req.body.cartItems) {
@@ -44,10 +51,48 @@ const addBillsController = async (req, res) => {
 //get blls data
 const getBillsController = async (req, res) => {
   try {
-    const bills = await billsModel.find();
+    // Check if user role is provided in query params
+    const { role, userId } = req.query;
+    
+    console.log(`GET /api/bills/get-bills с параметри: role=${role}, userId=${userId}`);
+    
+    let query = {};
+    
+    // If role is not admin and userId is provided, filter by userId
+    if (role !== 'admin' && userId) {
+      query = { userId };
+      console.log(`Филтриране на сметки за потребител ${userId} с роля ${role}`);
+    } else {
+      console.log(`Показване на всички сметки (admin)`);
+    }
+    
+    // Изведи всички сметки, които са в базата и техните полета userId
+    const allBills = await billsModel.find({});
+    console.log(`Общ брой сметки в базата данни: ${allBills.length}`);
+    if (allBills.length > 0) {
+      console.log('Всички userIds в базата данни:');
+      allBills.forEach((bill, index) => {
+        console.log(`Сметка ${index + 1}: userId = ${bill.userId}`);
+      });
+    }
+    
+    // Търсене по специфичен филтър
+    const bills = await billsModel.find(query);
+    console.log(`Намерени сметки по филтър: ${bills.length}`);
+    
+    // Отпечатай първите няколко сметки за дебъгване
+    if (bills.length > 0) {
+      console.log('Примерна намерена сметка:', {
+        id: bills[0]._id,
+        customerName: bills[0].customerName,
+        userId: bills[0].userId
+      });
+    }
+    
     res.send(bills);
   } catch (error) {
     console.log(error);
+    res.status(500).send('Error fetching bills');
   }
 };
 

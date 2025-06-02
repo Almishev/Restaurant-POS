@@ -100,12 +100,13 @@ const CartPage = () => {
   //handleSubmit
   const handleSubmit = async (value) => {
     try {
+      const userData = JSON.parse(localStorage.getItem("auth"));
       const newObject = {
         ...value,
         cartItems,
         subTotal,
         totalAmount: Number(subTotal),
-        userId: JSON.parse(localStorage.getItem("auth"))._id,
+        userId: userData.userId, // Използваме userId от auth данните
       };
       await axios.post("/api/bills/add-bills", newObject);
       message.success("Сметката е генерирана");
