@@ -15,9 +15,8 @@ import ReportsPage from "./pages/ReportsPage";
 import InventoryPage from "./pages/InventoryPage";
 import RecipePage from "./pages/RecipePage";
 import ReportsArchivePage from "./pages/ReportsArchivePage";
-import axios from "axios";
-import { useEffect, useState } from "react";
-import { message } from "antd";
+import UsersPage from "./pages/UsersPage";
+import { useEffect } from "react";
 import { initCronJobs } from './utils/cron';
 
 function App() {
@@ -104,7 +103,14 @@ function App() {
             }
           />
           <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
+          <Route 
+            path="/register" 
+            element={
+              <AdminRoute>
+                <Register />
+              </AdminRoute>
+            } 
+          />
           <Route
             path="/bar"
             element={
@@ -145,6 +151,14 @@ function App() {
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/users"
+            element={
+              <AdminRoute>
+                <UsersPage />
+              </AdminRoute>
+            }
+          />
         </Routes>
       </BrowserRouter>
     </>
@@ -156,6 +170,20 @@ export default App;
 export function ProtectedRoute({ children }) {
   if (localStorage.getItem("auth")) {
     return children;
+  } else {
+    return <Navigate to="/login" />;
+  }
+}
+
+export function AdminRoute({ children }) {
+  const auth = localStorage.getItem("auth");
+  if (auth) {
+    const { role } = JSON.parse(auth);
+    if (role === "admin") {
+      return children;
+    } else {
+      return <Navigate to="/" />;
+    }
   } else {
     return <Navigate to="/login" />;
   }

@@ -5,6 +5,9 @@ import { message } from "antd";
 import axios from "axios";
 import { useDispatch } from "react-redux";
 
+
+
+
 const Login = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -48,10 +51,12 @@ const Login = () => {
             </Form.Item>
 
             <div className="d-flex justify-content-between">
+              {/*
               <p>
               Нямате акаунт?
                 <Link to="/register"> Регистрирайте се тук! </Link>
               </p>
+              */}
               <Button type="primary" htmlType="submit">
                 Вход
               </Button>

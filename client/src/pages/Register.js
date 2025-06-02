@@ -1,9 +1,11 @@
 import React, { useEffect } from "react";
-import { Form, Input, Button } from "antd";
-import { Link, useNavigate } from "react-router-dom";
+import { Form, Input, Button, Select } from "antd";
+import { useNavigate } from "react-router-dom";
 import { message } from "antd";
 import axios from "axios";
 import { useDispatch } from "react-redux";
+
+const { Option } = Select;
 
 const Register = () => {
   const dispatch = useDispatch();
@@ -15,8 +17,8 @@ const Register = () => {
         type: "SHOW_LOADING",
       });
       await axios.post("/api/users/register", value);
-      message.success("Регистрацията е успешна!");
-      navigate("/login");
+      message.success("Потребителят е създаден успешно!");
+      navigate("/users");
       dispatch({ type: "HIDE_LOADING" });
     } catch (error) {
       dispatch({ type: "HIDE_LOADING" });
@@ -25,37 +27,49 @@ const Register = () => {
     }
   };
 
-  //currently login  user
+  // Проверка за администраторски права
   useEffect(() => {
-    if (localStorage.getItem("auth")) {
-      localStorage.getItem("auth");
-      navigate("/");
+    const auth = localStorage.getItem("auth");
+    if (auth) {
+      const { role } = JSON.parse(auth);
+      if (role !== "admin") {
+        message.error("Нямате достъп до тази страница!");
+        navigate("/");
+      }
+    } else {
+      navigate("/login");
     }
   }, [navigate]);
+
   return (
     <>
       <div className="register">
         <div className="regsiter-form">
           <h1>POS Система</h1>
-          <h3>Регистрация</h3>
+          <h3>Създаване на потребител</h3>
           <Form layout="vertical" onFinish={handleSubmit}>
-            <Form.Item name="name" label="Име">
+            <Form.Item name="name" label="Име" rules={[{ required: true, message: 'Моля, въведете име!' }]}>
               <Input />
             </Form.Item>
-            <Form.Item name="userId" label="Потребителксо име">
+            <Form.Item name="userId" label="Потребителско име" rules={[{ required: true, message: 'Моля, въведете потребителско име!' }]}>
               <Input />
             </Form.Item>
-            <Form.Item name="password" label="Парола">
+            <Form.Item name="password" label="Парола" rules={[{ required: true, message: 'Моля, въведете парола!' }]}>
               <Input type="password" />
+            </Form.Item>
+            <Form.Item name="role" label="Роля" rules={[{ required: true, message: 'Моля, изберете роля!' }]} initialValue="user">
+              <Select>
+                <Option value="user">Потребител</Option>
+                <Option value="admin">Администратор</Option>
+              </Select>
             </Form.Item>
 
             <div className="d-flex justify-content-between">
-              <p>
-              Вече имате акаунт?
-                <Link to="/login">Влезте тук !</Link>
-              </p>
+              <Button type="default" onClick={() => navigate("/users")}>
+                Назад
+              </Button>
               <Button type="primary" htmlType="submit">
-                Регистрация
+                Създай потребител
               </Button>
             </div>
           </Form>

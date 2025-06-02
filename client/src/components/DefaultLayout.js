@@ -16,7 +16,7 @@ import {FolderOpenOutlined,
   LogoutOutlined,
   CopyOutlined,
   UnorderedListOutlined,
-  ShoppingCartOutlined,
+
 } from "@ant-design/icons";
 import "../styles/DefaultLayout.css";
 import Spinner from "./Spinner";
@@ -131,6 +131,11 @@ const DefaultLayout = ({ children }) => {
             {userRole === "admin" && (
           <Menu.Item key="/recipe" icon={<BookOutlined />}>
             <Link to="/recipe">Рецепти</Link>
+          </Menu.Item>
+            )}
+            {userRole === "admin" && (
+          <Menu.Item key="/users" icon={<UserOutlined />}>
+            <Link to="/users">Потребители</Link>
           </Menu.Item>
             )}
           <Menu.Item

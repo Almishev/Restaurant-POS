@@ -39,13 +39,37 @@ const registerController = async (req, res) => {
   }
 };
 
-// Връща всички потребители (за отчети)
+// Връща всички потребители (за отчети и администрация)
 const getUsersController = async (req, res) => {
   try {
-    const users = await userModal.find({}, { _id: 1, name: 1, userId: 1 });
+    const users = await userModal.find();
     res.json(users);
   } catch (error) {
     res.status(500).json({ message: "Грешка при зареждане на потребителите!" });
+  }
+};
+
+// Актуализация на потребител
+const updateUserController = async (req, res) => {
+  try {
+    const { id } = req.params;
+    await userModal.findByIdAndUpdate(id, req.body);
+    res.status(200).json({ message: "Потребителят е обновен успешно!" });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ message: "Грешка при обновяване на потребителя!" });
+  }
+};
+
+// Изтриване на потребител
+const deleteUserController = async (req, res) => {
+  try {
+    const { id } = req.params;
+    await userModal.findByIdAndDelete(id);
+    res.status(200).json({ message: "Потребителят е изтрит успешно!" });
+  } catch (error) {
+    console.log(error);
+    res.status(500).json({ message: "Грешка при изтриване на потребителя!" });
   }
 };
 
@@ -53,4 +77,6 @@ module.exports = {
   loginController,
   registerController,
   getUsersController,
+  updateUserController,
+  deleteUserController,
 };
