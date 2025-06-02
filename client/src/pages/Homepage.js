@@ -276,10 +276,10 @@ const Homepage = () => {
               <div
                 key={category._id}
                 className={`d-flex category ${selectedCategory === category.name && "category-active"}`}
-                style={{ width: "100%", marginBottom: 16, justifyContent: "flex-start", cursor: "pointer" }}
+                style={{ width: "100%", marginBottom: 16,background:"#008080", justifyContent: "flex-start", cursor: "pointer" }}
                 onClick={() => setSelectedCategory(category.name)}
               >
-                <h4>{category.name}</h4>
+                <h4 style={{color: "silver"}}>{category.name}</h4>
               </div>
             ))}
           </div>
@@ -291,7 +291,7 @@ const Homepage = () => {
               .filter((i) => i.category === selectedCategory)
               .map((item) => (
                 <Col xs={24} sm={12} md={24} lg={12} key={item._id}>
-                  <div style={{ border: "1px solid #eee", borderRadius: 8, padding: 16, textAlign: "center", background: "#fafcff" }}>
+                  <div style={{ border: "1px solid #eee", borderRadius: 8, padding: 16, textAlign: "center", background: "#E0E0E0" }}>
                     <h4>{item.name}</h4>
                     <div style={{ margin: "8px 0" }}><b>{item.price} лв</b></div>
                     <Button type="primary" onClick={() => handleAddToCart(item)}>
@@ -335,7 +335,7 @@ const Homepage = () => {
               <h2>Общо: {grandTotal} лв</h2>
             </div>
             <div style={{ display: "flex", gap: 12, marginTop: 24, justifyContent: "flex-end" }}>
-              <Button type="default" onClick={handleSendToKitchen} disabled={pendingItems.length === 0}>
+              <Button type="default" style={{background:"#FFC300"}} onClick={handleSendToKitchen} disabled={pendingItems.length === 0}>
                 Изпрати към кухнята
               </Button>
               <Button type="primary" onClick={handleGenerateBillClick} disabled={grandTotal === 0}>
