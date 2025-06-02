@@ -173,7 +173,7 @@ const RecipePage = () => {
                         rules={[{ required: true, message: "Количество!" }]}
                         style={{ flex: 1 }}
                       >
-                        <InputNumber min={1} placeholder="Количество" style={{ width: "100%" }} />
+                        <InputNumber min={0.1} step={0.01} placeholder="Количество" style={{ width: "100%" }} />
                       </Form.Item>
                       <Form.Item
                         {...restField}
@@ -185,8 +185,6 @@ const RecipePage = () => {
                           <Select.Option value="бр.">бр.</Select.Option>
                           <Select.Option value="кг.">кг.</Select.Option>
                           <Select.Option value="л.">л.</Select.Option>
-                          <Select.Option value="гр.">гр.</Select.Option>
-                          <Select.Option value="мл.">мл.</Select.Option>
                         </Select>
                       </Form.Item>
                       <Button danger onClick={() => remove(name)}>-</Button>

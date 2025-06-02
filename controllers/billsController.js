@@ -17,20 +17,18 @@ const addBillsController = async (req, res) => {
       if (recipe) {
         for (const ing of recipe.ingredients) {
           // Намаляваме quantity в склада с ing.quantity * cartItem.quantity
-          await Inventory.findOneAndUpdate(
-            { item: ing.inventory },
-            {
-              $inc: { quantity: -ing.quantity * cartItem.quantity },
-              $push: {
-                history: {
-                  type: 'out',
-                  amount: ing.quantity * cartItem.quantity,
-                  user: req.body.userId || 'sale',
-                  note: `Продажба на ${cartItem.name}`
-                }
-              }
-            }
-          );
+          const inventory = await Inventory.findById(ing.inventory);
+          if (inventory) {
+            const amountToDeduct = ing.quantity * cartItem.quantity;
+            inventory.quantity = Math.round((inventory.quantity - amountToDeduct) * 100) / 100;
+            inventory.history.push({
+              type: 'out',
+              amount: amountToDeduct,
+              user: req.body.userId || 'sale',
+              note: `Продажба на ${cartItem.name}`
+            });
+            await inventory.save();
+          }
         }
       }
     }

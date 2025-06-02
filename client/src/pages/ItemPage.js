@@ -166,6 +166,7 @@ const ItemPage = () => {
                   </Select.Option>
                 ))}
               </Select>
+              
             </Form.Item>
             <Form.Item name="department" label="Отдел" rules={[{ required: true, message: "Избери отдел!" }]}>
               <Select>

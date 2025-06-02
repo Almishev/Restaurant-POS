@@ -64,7 +64,9 @@ const InventoryPage = () => {
   const handleStock = async (values) => {
     try {
       await axios.post(`/api/inventory/${modalType}`, {
-        itemId: selectedItem,
+        name: selectedItem.name,
+        category: selectedItem.category,
+        unit: selectedItem.unit,
         amount: values.amount,
         user: "admin", // или вземи от auth
         note: values.note,
@@ -100,7 +102,7 @@ const InventoryPage = () => {
             label="Количество"
             rules={[{ required: true, message: "Въведи количество!" }]}
           >
-            <InputNumber min={1} style={{ width: "100%" }} />
+            <InputNumber min={0.1} step={0.01} style={{ width: "100%" }} />
           </Form.Item>
           <Form.Item name="note" label="Бележка">
             <Input />
@@ -154,8 +156,7 @@ const InventoryPage = () => {
               <Select.Option value="бр.">бр.</Select.Option>
               <Select.Option value="кг.">кг.</Select.Option>
               <Select.Option value="л.">л.</Select.Option>
-              <Select.Option value="гр.">гр.</Select.Option>
-              <Select.Option value="мл.">мл.</Select.Option>
+            
             </Select>
           </Form.Item>
           <Form.Item

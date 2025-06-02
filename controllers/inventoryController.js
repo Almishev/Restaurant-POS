@@ -13,16 +13,20 @@ exports.getInventory = async (req, res) => {
 // Вход на стока (добавяне към quantity)
 exports.addStock = async (req, res) => {
   try {
+    console.log('addStock: body:', req.body);
     const { name, category, unit, amount, user, note } = req.body;
     let inventory = await Inventory.findOne({ name, unit });
     if (!inventory) {
       inventory = new Inventory({ name, category, unit, quantity: 0 });
     }
     inventory.quantity += amount;
+    inventory.quantity = Math.round(inventory.quantity * 100) / 100;
     inventory.history.push({ type: 'in', amount, user, note });
     await inventory.save();
+    console.log('addStock: успешно добавено:', inventory);
     res.json(inventory);
   } catch (error) {
+    console.error('Грешка при addStock:', error);
     res.status(500).json({ message: 'Грешка при вход на стока', error });
   }
 };
@@ -36,6 +40,7 @@ exports.removeStock = async (req, res) => {
       return res.status(404).json({ message: 'Суровината не е намерена!' });
     }
     inventory.quantity -= amount;
+    inventory.quantity = Math.round(inventory.quantity * 100) / 100;
     inventory.history.push({ type: 'out', amount, user, note });
     await inventory.save();
     res.json(inventory);
