@@ -5,7 +5,8 @@ const {
   getReportController,
   createZReportController,
   getZReportsController,
-  syncZReportController
+  syncZReportController,
+  getBillByIdController
 } = require("./../controllers/billsController");
 
 const router = express.Router();
@@ -17,6 +18,9 @@ router.post("/add-bills", addBillsController);
 
 //MEthod - GET
 router.get("/get-bills", getBillsController);
+
+// Вземане на конкретен бон по ID
+router.get("/get-bill/:id", getBillByIdController);
 
 // X/Z отчет
 router.get("/get-report", getReportController);

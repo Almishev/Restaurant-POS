@@ -14,15 +14,17 @@ const ReportsPage = () => {
   const [selectedUser, setSelectedUser] = useState(null);
   const [dates, setDates] = useState([null, null]);  const [isZ, setIsZ] = useState(false);
   const [userRole, setUserRole] = useState("");
+  const [currentUserId, setCurrentUserId] = useState("");
   const printRef = useRef();
 
   useEffect(() => {
-    // Get user role from localStorage
+    // Get user role and ID from localStorage
     const userData = localStorage.getItem("auth");
     if (userData) {
       try {
         const parsedUser = JSON.parse(userData);
         setUserRole(parsedUser?.role || "");
+        setCurrentUserId(parsedUser?.userId || "");
       } catch (error) {
         console.error("Error parsing user data:", error);
       }
@@ -39,6 +41,20 @@ const ReportsPage = () => {
     };
     fetchUsers();
   }, []);
+
+  // Когато потребителската роля е заредена, автоматично избираме текущия потребител ако не е админ
+  useEffect(() => {
+    if (userRole && users.length > 0) {
+      if (userRole !== "admin" && currentUserId) {
+        // За не-admin потребители, директно използваме техния userId (string идентификатор)
+        // вместо MongoDB ObjectId
+        console.log(`Автоматично избиране на текущия потребител: ${currentUserId}`);
+        
+        // Директно използваме userId-то, а не MongoDB _id
+        setSelectedUser(currentUserId);
+      }
+    }
+  }, [userRole, users, currentUserId]);
 
   // Поправям 'Дневен отчет' - когато датите се сменят, автоматично викай fetchReport ако е дневен отчет
   useEffect(() => {
@@ -60,10 +76,31 @@ const ReportsPage = () => {
         from: dates[0].startOf("day").toISOString(),
         to: dates[1].endOf("day").toISOString(),
       };
-      if (selectedUser) params.userId = selectedUser;
+      
+      // Debug: Print userId before making request
+      console.log(`Текущ потребител: роля=${userRole}, id=${currentUserId}`);
+      console.log(`Избран потребител за отчет: ${selectedUser || 'всички'}`);
+      
+      if (selectedUser) {
+        params.userId = selectedUser;
+        console.log(`Ще се филтрира по потребител с ID: ${selectedUser}`);
+      }
+      
+      console.log("Изпращане на заявка за отчет с параметри:", params);
+      
       const res = await axios.get("/api/bills/get-report", { params });
+      console.log("Получен отчет:", res.data);
+      
+      if (res.data.totalAmount === 0) {
+        console.log("ВНИМАНИЕ: Отчетът върна сума 0 - проверка на резултата:", {
+          totalBills: res.data.totalBills,
+          items: Object.keys(res.data.items || {}).length
+        });
+      }
+      
       setReport(res.data);
-    } catch {
+    } catch (error) {
+      console.error("Грешка при зареждане на отчета:", error);
       message.error("Грешка при зареждане на отчета!");
     }
     setLoading(false);
@@ -121,14 +158,15 @@ const ReportsPage = () => {
           </Col>
           <Col>
             <Select
-              allowClear
+              allowClear={userRole === "admin"}
               placeholder="Сервитьор (по избор)"
               style={{ minWidth: 180 }}
               value={selectedUser}
               onChange={setSelectedUser}
+              disabled={userRole !== "admin"}
             >
               {users.map(u => (
-                <Select.Option key={u._id} value={u._id}>{u.name || u.userId}</Select.Option>
+                <Select.Option key={u._id} value={u.userId}>{u.name || u.userId}</Select.Option>
               ))}
             </Select>
           </Col>
@@ -137,7 +175,9 @@ const ReportsPage = () => {
               onClick={() => {
                 const today = [dayjs().startOf("day"), dayjs().endOf("day")];
                 setDates(today);
-                setSelectedUser(null);
+                if (userRole === "admin") {
+                  setSelectedUser(null);
+                }
               }}
             >
               Дневен отчет
@@ -206,4 +246,4 @@ const ReportsPage = () => {
   );
 };
 
-export default ReportsPage; 
+export default ReportsPage;

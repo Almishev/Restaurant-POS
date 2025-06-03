@@ -2,8 +2,8 @@ import React, { useEffect, useState, useRef } from "react";
 import DefaultLayout from "../components/DefaultLayout";
 import { useDispatch } from "react-redux";
 import { EyeOutlined } from "@ant-design/icons";
-import ReactToPrint from "react-to-print";
 import { useReactToPrint } from "react-to-print";
+import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { Modal, Button, Table } from "antd";
 import "../styles/InvoiceStyles.css";
@@ -15,6 +15,9 @@ const BillsPage = () => {
   const [selectedBill, setSelectedBill] = useState(null);
   const [userRole, setUserRole] = useState("");
   const [userId, setUserId] = useState("");
+  
+  // Hook for navigation
+  const navigate = useNavigate();
   
   // Get user data from localStorage
   useEffect(() => {
@@ -82,17 +85,40 @@ const BillsPage = () => {
     {
       title: "Действие",
       dataIndex: "_id",
-      render: (id, record) => (
-        <div>
-          <EyeOutlined
-            style={{ cursor: "pointer" }}
-            onClick={() => {
-              setSelectedBill(record);
-              setPopupModal(true);
-            }}
-          />
-        </div>
-      ),
+      render: (id, record) => {
+        // Проверка за дата на създаване (сторно възможно само до 24 часа)
+        // Използваме date или createdAt, което от двете е налично
+        const billDate = new Date(record.createdAt || record.date);
+        const currentDate = new Date();
+        const timeDiff = Math.abs(currentDate - billDate) / 36e5; // hours
+        const canStorno = timeDiff <= 24;
+        
+        console.log("Сметка:", record._id, "Дата:", billDate, "Разлика в часове:", timeDiff, "Може сторно:", canStorno);
+        
+        return (
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <Button 
+              type="default"
+              icon={<EyeOutlined />}
+              onClick={() => {
+                setSelectedBill(record);
+                setPopupModal(true);
+              }}
+            >
+              Преглед
+            </Button>
+            {canStorno && (
+              <Button 
+                type="primary" 
+                danger
+                onClick={() => navigate(`/storno`, { state: { billId: record._id } })}
+              >
+                Сторниране
+              </Button>
+            )}
+          </div>
+        );
+      },
     },
   ];
   console.log(selectedBill);

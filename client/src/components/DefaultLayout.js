@@ -16,6 +16,8 @@ import {FolderOpenOutlined,
   LogoutOutlined,
   CopyOutlined,
   UnorderedListOutlined,
+  RollbackOutlined,
+  FileDoneOutlined
 
 } from "@ant-design/icons";
 import "../styles/DefaultLayout.css";
@@ -118,26 +120,15 @@ const DefaultLayout = ({ children }) => {
           <Menu.Item key="/reports" icon={<CopyOutlined />}>
             <Link to="/reports">Отчети</Link>
           </Menu.Item>
-           {userRole === "admin" && (
-          <Menu.Item key="/reports-archive" icon={<FileSearchOutlined />}>
-  <Link to="/reports-archive">Архивирани отчети</Link>
-</Menu.Item>
-          )}
- {userRole === "admin" && (
-          <Menu.Item key="/inventory" icon={<HddOutlined />}>
-            <Link to="/inventory">Склад</Link>
+          <Menu.Item key="/storno" icon={<RollbackOutlined />}>
+            <Link to="/storno">Сторниране</Link>
           </Menu.Item>
-          )}
-            {userRole === "admin" && (
-          <Menu.Item key="/recipe" icon={<BookOutlined />}>
-            <Link to="/recipe">Рецепти</Link>
+          <Menu.Item key="/storno-list" icon={<FileDoneOutlined />}>
+            <Link to="/storno-list">Сторно Операции</Link>
           </Menu.Item>
-            )}
-            {userRole === "admin" && (
-          <Menu.Item key="/users" icon={<UserOutlined />}>
-            <Link to="/users">Потребители</Link>
+          <Menu.Item key="/storno-report" icon={<FileSearchOutlined />}>
+            <Link to="/storno-report">Отчет Сторно</Link>
           </Menu.Item>
-            )}
           <Menu.Item
             key="/logout"
             icon={<LogoutOutlined />}
@@ -161,6 +152,26 @@ const DefaultLayout = ({ children }) => {
               }
             )}
           </div>
+          
+          {userRole === "admin" && (
+            <div style={{ display: 'flex', alignItems: 'center' }}>
+              <Menu theme="light" mode="horizontal" style={{ display: 'flex', borderBottom: 'none', background: 'transparent' }}>
+                <Menu.Item key="/reports-archive" icon={<FileSearchOutlined />} style={{ margin: '0 8px' }}>
+                  <Link to="/reports-archive" style={{ color: '#1890ff' }}>Архивирани отчети</Link>
+                </Menu.Item>
+                <Menu.Item key="/inventory" icon={<HddOutlined />} style={{ margin: '0 8px' }}>
+                  <Link to="/inventory" style={{ color: '#1890ff' }}>Склад</Link>
+                </Menu.Item>
+                <Menu.Item key="/recipe" icon={<BookOutlined />} style={{ margin: '0 8px' }}>
+                  <Link to="/recipe" style={{ color: '#1890ff' }}>Рецепти</Link>
+                </Menu.Item>
+                <Menu.Item key="/users" icon={<UserOutlined />} style={{ margin: '0 8px' }}>
+                  <Link to="/users" style={{ color: '#1890ff' }}>Потребители</Link>
+                </Menu.Item>
+              </Menu>
+            </div>
+          )}
+          
           <div style={{ marginRight: '20px', color: '#1890ff', fontWeight: 'bold' }}>
             {(() => {
               const userData = localStorage.getItem("auth");

@@ -26,14 +26,14 @@ const billSchema = mongoose.Schema(
     },
     date: {
       type: Date,
-      default: Date.now(),
+      default: Date.now, // Функция, а не резултат от функцията
     },
     userId: {
       type: String,
       required: true,
     },
   },
-  { timestamp: true }
+  { timestamps: true }
 );
 
 const Bills = mongoose.model("bills", billSchema);

@@ -10,13 +10,13 @@ const tableSchema = mongoose.Schema(
     createdBy: {
       type: String,
       required: false,
-    },
-    cartItems: [
+    },    cartItems: [
       {
         itemId: String,
         name: String,
         price: Number,
         quantity: Number,
+        status: { type: String, default: "Изпратено" }
       }
     ],
     pendingItems: [

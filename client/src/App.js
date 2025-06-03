@@ -16,6 +16,9 @@ import InventoryPage from "./pages/InventoryPage";
 import RecipePage from "./pages/RecipePage";
 import ReportsArchivePage from "./pages/ReportsArchivePage";
 import UsersPage from "./pages/UsersPage";
+import StornoPage from "./pages/StornoPage";
+import StornoListPage from "./pages/StornoListPage";
+import StornoReportPage from "./pages/StornoReportPage";
 import { useEffect } from "react";
 import { initCronJobs } from './utils/cron';
 
@@ -157,6 +160,30 @@ function App() {
               <AdminRoute>
                 <UsersPage />
               </AdminRoute>
+            }
+          />
+          <Route
+            path="/storno"
+            element={
+              <ProtectedRoute>
+                <StornoPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/storno-list"
+            element={
+              <ProtectedRoute>
+                <StornoListPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/storno-report"
+            element={
+              <ProtectedRoute>
+                <StornoReportPage />
+              </ProtectedRoute>
             }
           />
         </Routes>

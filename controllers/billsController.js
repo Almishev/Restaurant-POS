@@ -100,14 +100,56 @@ const getBillsController = async (req, res) => {
 const getReportController = async (req, res) => {
   try {
     const { from, to, userId } = req.query;
+    console.log(`[GET REPORT] Получени параметри: from=${from}, to=${to}, userId=${userId}`);
+    
     const filter = {};
     if (from && to) {
       filter.date = { $gte: new Date(from), $lte: new Date(to) };
+      console.log(`[GET REPORT] Филтриране по период: ${new Date(from).toLocaleString()} - ${new Date(to).toLocaleString()}`);
     }
+    
+    // Check if we received ObjectId or userId (string identifier)
     if (userId) {
-      filter.userId = userId;
+      // First try to find user by _id (ObjectId)
+      const User = require("../models/userModel");
+      let user = null;
+      
+      try {
+        if (/^[0-9a-fA-F]{24}$/.test(userId)) {
+          console.log(`[GET REPORT] Търсене на потребител по _id: ${userId}`);
+          user = await User.findById(userId);
+        }
+        
+        // If user found by _id
+        if (user) {
+          console.log(`[GET REPORT] Намерен потребител по _id: ${user.name} (${user.userId})`);
+          filter.userId = user.userId; // We filter by userId, not by _id
+        } else {
+          // If not found by _id, use the userId directly
+          console.log(`[GET REPORT] Директно филтриране по userId: ${userId}`);
+          filter.userId = userId;
+        }
+      } catch (error) {
+        console.log(`[GET REPORT] Грешка при търсене на потребител: ${error.message}`);
+        filter.userId = userId; // Fallback to using the userId as-is
+      }
     }
+    
+    console.log(`[GET REPORT] Финален филтър за търсене: ${JSON.stringify(filter)}`);
+    
     const bills = await billsModel.find(filter);
+    console.log(`[GET REPORT] Намерени ${bills.length} сметки по зададения филтър`);
+    
+    // Log the first few bills to debug
+    if (bills.length > 0) {
+      console.log(`[GET REPORT] Първи ${Math.min(3, bills.length)} намерени сметки:`);
+      bills.slice(0, 3).forEach((bill, i) => {
+        console.log(`Сметка ${i+1}: id=${bill._id}, потребител=${bill.userId}, сума=${bill.totalAmount}, артикули=${(bill.cartItems || []).length}`);
+      });
+    } else {
+      console.log(`[GET REPORT] Не бяха намерени сметки за зададения период и потребител`);
+    }
+    
     // Сумиране
     const totalAmount = bills.reduce((sum, b) => sum + (b.totalAmount || 0), 0);
     const totalBills = bills.length;
@@ -124,6 +166,9 @@ const getReportController = async (req, res) => {
         items[item.name].total += item.price * item.quantity;
       });
     });
+    
+    console.log(`[GET REPORT] Обобщение: общо=${totalAmount}, брой сметки=${totalBills}, артикули=${Object.keys(items).length}`);
+    
     res.json({
       totalAmount,
       totalBills,
@@ -132,7 +177,8 @@ const getReportController = async (req, res) => {
       bills, // по желание: махни ако не искаш целите сметки
     });
   } catch (error) {
-    res.status(500).json({ message: "Грешка при генериране на отчет!", error });
+    console.log(`[GET REPORT] Грешка при генериране на отчет: ${error.message}`);
+    res.status(500).json({ message: "Грешка при генериране на отчет!", error: error.message });
   }
 };
 
@@ -210,6 +256,23 @@ const syncZReportController = async (req, res) => {
   }
 };
 
+// Вземане на конкретен бон по ID
+const getBillByIdController = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const bill = await billsModel.findById(id);
+    
+    if (!bill) {
+      return res.status(404).json({ error: "Бонът не е намерен" });
+    }
+    
+    res.status(200).json(bill);
+  } catch (error) {
+    console.log("Грешка при вземане на бон по ID:", error);
+    res.status(500).json({ error: "Възникна грешка при вземане на данни за бона" });
+  }
+};
+
 module.exports = {
   addBillsController,
   getBillsController,
@@ -217,4 +280,5 @@ module.exports = {
   createZReportController,
   getZReportsController,
   syncZReportController,
+  getBillByIdController,
 };

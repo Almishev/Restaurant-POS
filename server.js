@@ -31,6 +31,7 @@ app.use("/api/tables", require("./routes/tableRoutes"));
 app.use("/api/kitchen", require("./routes/kitchenRoutes"));
 app.use('/api/inventory', inventoryRoute);
 app.use('/api/recipes', recipeRoute);
+app.use('/api/stornos', require("./routes/stornoRoute"));
 
 //port
 const PORT = process.env.PORT || 8081;

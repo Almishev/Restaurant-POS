@@ -55,16 +55,64 @@ router.put("/orders/:id/done", async (req, res) => {
     const { itemName } = req.body;
     const order = await KitchenOrder.findById(req.params.id);
     if (!order) return res.status(404).json({ message: "Поръчката не е намерена!" });
+    
+    // Обновяваме статуса на артикула
     order.items = order.items.map(item =>
       item.name === itemName ? { ...item.toObject(), done: true } : item
     );
-    await order.save();
+    await order.save();      // Обновяване на статуса и в таблицата
+    try {
+      // Директно обновяваме таблицата без да правим заявка
+      const Table = require("../models/tableModel");
+      const table = await Table.findOne({ name: order.tableName });
+      
+      if (table && table.cartItems && table.cartItems.length > 0) {      // Обновяваме статуса на артикула в cartItems на масата
+        table.cartItems = table.cartItems.map(item => {      // Отпечатваме текущия статус на този артикул
+          console.log(`[KITCHEN] Артикул: ${item.name}, Текущ статус: ${item.status || 'няма статус'}, Търсено име: ${itemName}`);
+          
+          // Нормализираме имената за сравнение (премахваме интервали и правим всичко малки букви)
+          const normalizedItemName = item.name.toLowerCase().trim();
+          const normalizedSearchName = itemName.toLowerCase().trim();
+          
+          // Проверяваме дали артикулът е "Цезар" и отпечатваме допълнителна информация
+          if (normalizedItemName.includes("цезар")) {
+            console.log(`[KITCHEN] Намерен артикул Цезар: ${JSON.stringify(item)}`);
+            // Ако статусът е undefined или null, добавяме го
+            if (!item.status) {
+              item.status = "Изпратено";
+            }
+          }
+          
+          // Правим сравнение с нормализираните имена
+          if (normalizedItemName === normalizedSearchName || item.name === itemName) {
+            // Проверка дали item e Mongoose документ или обикновен обект
+            const updatedItem = typeof item.toObject === 'function' ? 
+              { ...item.toObject(), status: "Готово" } : 
+              { ...item, status: "Готово" };
+            
+            console.log(`[KITCHEN] Променям статус на "${itemName}" на "Готово"`);
+            return updatedItem;
+          }
+          return item;
+        });
+        
+        await table.save();
+        console.log(`[KITCHEN] Статусът на артикул ${itemName} е обновен на "Готово" за маса ${order.tableName}`);
+      } else {
+        console.log(`[KITCHEN] Не намерих артикул ${itemName} в cartItems на маса ${order.tableName}`);
+      }
+    } catch (tableError) {
+      console.error("Грешка при обновяване на статуса в масата:", tableError);
+    }
+    
     // Ако всички артикули са done, изтрий поръчката
     if (order.items.every(i => i.done)) {
       await KitchenOrder.findByIdAndDelete(req.params.id);
     }
+    
     res.status(200).json({ message: "Артикулът е отбелязан като готов!" });
   } catch (error) {
+    console.error("Грешка при отбелязване на артикул като готов:", error);
     res.status(400).json({ message: "Грешка при отбелязване на артикул като готов!" });
   }
 });

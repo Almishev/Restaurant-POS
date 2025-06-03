@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import DefaultLayout from "./../components/DefaultLayout";
 import axios from "axios";
 import { Row, Col, message, Table, Button, Modal, Form, Input, Select } from "antd";
 import { useDispatch } from "react-redux";
 import { useNavigate, useParams } from "react-router-dom";
-import { CheckCircleTwoTone } from '@ant-design/icons';
+import { CheckCircleTwoTone, SwapOutlined } from '@ant-design/icons';
+import TransferItemsModal from "../components/TransferItemsModal";
 
 const Homepage = () => {
   const { tableId } = useParams();
@@ -17,12 +18,12 @@ const Homepage = () => {
   const [totalAmount, setTotalAmount] = useState(0);
   const [kitchenOrders, setKitchenOrders] = useState([]);
   const [billPopup, setBillPopup] = useState(false);
+  const [transferModalVisible, setTransferModalVisible] = useState(false);
   const [form] = Form.useForm();
   const dispatch = useDispatch();
   const navigate = useNavigate();
-
   // Зареждане на масата по tableId
-  const fetchTable = async () => {
+  const fetchTable = useCallback(async () => {
     try {
       const res = await axios.get("/api/tables/get-tables");
       const foundTable = res.data.find((t) => t._id === tableId);
@@ -39,14 +40,12 @@ const Homepage = () => {
       message.error("Грешка при зареждане на масата!");
       navigate("/tables");
     }
-  };
-
+  }, [tableId, navigate]);
   useEffect(() => {
     if (tableId) fetchTable();
-  }, [tableId, navigate]);
-
+  }, [tableId, navigate, fetchTable]);
   // Fetch categories
-  const fetchCategories = async () => {
+  const fetchCategories = useCallback(async () => {
     try {
       const res = await axios.get("/api/categories/get-categories");
       setCategories(res.data);
@@ -56,10 +55,10 @@ const Homepage = () => {
     } catch (error) {
       message.error("Грешка при зареждане на категориите!");
     }
-  };
+  }, []);
 
   // Fetch items
-  const fetchItems = async () => {
+  const fetchItems = useCallback(async () => {
     try {
       dispatch({ type: "SHOW_LOADING" });
       const { data } = await axios.get("/api/items/get-item");
@@ -69,25 +68,52 @@ const Homepage = () => {
       dispatch({ type: "HIDE_LOADING" });
       message.error("Грешка при зареждане на продуктите!");
     }
-  };
-
+  }, [dispatch]);
   useEffect(() => {
     fetchCategories();
     fetchItems();
-  }, []);
-
-  // Зареждане на статусите от кухнята (готови артикули)
+  }, [fetchCategories, fetchItems]);// Зареждане на статусите от кухнята (готови артикули)
   useEffect(() => {
     const fetchKitchenOrders = async () => {
       try {
         const res = await axios.get('/api/kitchen/orders');
         setKitchenOrders(res.data);
-      } catch {}
+      } catch (error) {
+        console.error("Грешка при зареждане на поръчките от кухнята:", error);
+      }
     };
+    
+    // Функция за опресняване на данните за масата
+    const refreshTableData = async () => {
+      if (tableId) {
+        try {
+          const res = await axios.get("/api/tables/get-tables");
+          const foundTable = res.data.find((t) => t._id === tableId);
+          if (foundTable) {
+            setTable(foundTable);
+            setPendingItems(foundTable.pendingItems || []);
+            setCartItems(foundTable.cartItems || []);
+            setTotalAmount(foundTable.totalAmount || 0);
+          }
+        } catch (error) {
+          console.error("Грешка при опресняване на данните за масата:", error);
+        }
+      }
+    };
+    
+    // Извикваме веднага
     fetchKitchenOrders();
-    const interval = setInterval(fetchKitchenOrders, 5000); // auto-refresh
-    return () => clearInterval(interval);
-  }, []);
+    
+    // Задаваме интервал за автоматично опресняване
+    const kitchenInterval = setInterval(fetchKitchenOrders, 5000); 
+    const tableInterval = setInterval(refreshTableData, 5000);
+    
+    // Почистване при размонтиране на компонента
+    return () => {
+      clearInterval(kitchenInterval);
+      clearInterval(tableInterval);
+    };
+  }, [tableId]);
 
   // Добавяне на артикул към pendingItems
   const handleAddToCart = async (item) => {
@@ -132,7 +158,6 @@ const Homepage = () => {
       message.error("Грешка при обновяване на поръчката!");
     }
   };
-
   // Изпрати към кухнята (само pendingItems)
   const handleSendToKitchen = async () => {
     try {
@@ -148,17 +173,34 @@ const Homepage = () => {
         items: itemsWithDepartment,
         waiterName: user ? user.name : ""
       });
+        // Добавяме status: "Изпратено" към всеки елемент преди да го преместим в cartItems
+      const itemsWithStatus = pendingItems.map(item => {
+        // Проверка дали вече има статус и ако няма, задаваме "Изпратено"
+        if (!item.status) {
+          return {
+            ...item,
+            status: "Изпратено"
+          };
+        }
+        // Ако статусът е "Готово", запазваме го
+        return item;
+      });
+      
+      console.log("[SEND TO KITCHEN] Артикули за изпращане:", itemsWithStatus);
+      
       // Мести pendingItems в cartItems и изчисти pendingItems
       await axios.put("/api/tables/update-table-cart", {
         tableId,
-        cartItems: [...(table.cartItems || []), ...pendingItems],
+        cartItems: [...(table.cartItems || []), ...itemsWithStatus],
         totalAmount,
       });
+      
       await updatePendingInDB([]); // изчисти pendingItems
       await fetchTable(); // обнови интерфейса
       message.success("Поръчката е изпратена към кухнята!");
     } catch (error) {
       message.error("Грешка при изпращане към кухнята!");
+      console.error(error);
     }
   };
   // Генерирай сметка (ако има pendingItems, първо ги изпрати към кухнята)
@@ -220,6 +262,18 @@ const Homepage = () => {
     );
   }
 
+  // Отваряне на модалния прозорец за прехвърляне
+  const showTransferModal = () => {
+    setTransferModalVisible(true);
+  };
+
+  // Затваряне на модалния прозорец за прехвърляне
+  const handleTransferCancel = () => {
+    setTransferModalVisible(false);
+    // Презареждаме данните за масата след прехвърлянето
+    fetchTable();
+  };
+
   const cartColumns = [
     { title: "Име", dataIndex: "name" },
     { title: "Цена", dataIndex: "price" },
@@ -244,29 +298,64 @@ const Homepage = () => {
       ),
     },
   ];
-
   // Колони за изпратени артикули (неактивни)
   const sentColumns = [
     { title: "Име", dataIndex: "name" },
     { title: "Цена", dataIndex: "price" },
-    { title: "Количество", dataIndex: "quantity" },
-    { title: "Статус", render: (_, record) => {
-      // Проверка дали този артикул е бил готов в кухнята (дори ако поръчката вече е изтрита)
-      const isDone = kitchenOrders.some(order =>
-        order.tableName === table.name &&
-        order.items.some(item => item.name === record.name && item.done === true)
-      );
-      return isDone ? <span style={{ color: 'green' }}><CheckCircleTwoTone twoToneColor="#52c41a" /> Готово</span> : <span style={{ color: '#888' }}>Изпратено</span>;
+    { title: "Количество", dataIndex: "quantity" },    { title: "Статус", render: (_, record) => {      // Извеждаме в конзолата информация за debugging
+      console.log(`[STATUS CHECK] Артикул: ${record.name}, Статус: ${record.status || 'няма'}`);
+
+      // Проверка за статус от record
+      if (record.status === "Готово") {
+        console.log(`[STATUS CHECK] Артикул ${record.name} има статус Готово директно в record`);
+        return <span style={{ color: 'green' }}><CheckCircleTwoTone twoToneColor="#52c41a" /> Готово</span>;
+      }
+      
+      // Специална проверка за салата Цезар
+      if (record.name === "Цезар") {
+        console.log(`[STATUS CHECK] Проверка на специален случай за Цезар: ${JSON.stringify(record)}`);
+      }
+      
+      // Проверка дали артикулът е маркиран като готов в active orders
+      let isDone = false;
+      for (const order of kitchenOrders) {
+        if (order.tableName === table.name) {
+          for (const item of order.items) {
+            if (item.name === record.name && item.done === true) {
+              isDone = true;
+              console.log(`[STATUS CHECK] Артикул ${record.name} е маркиран като готов в активна поръчка`);
+              break;
+            }
+          }
+          if (isDone) break;
+        }
+      }
+      
+      return isDone ? 
+        <span style={{ color: 'green' }}><CheckCircleTwoTone twoToneColor="#52c41a" /> Готово</span> : 
+        <span style={{ color: '#888' }}>Изпратено</span>;
     } },
   ];
 
   // Изчисли общата сума за всички артикули (изпратени + текущи)
   const grandTotal = [...cartItems, ...pendingItems].reduce((sum, i) => sum + i.price * i.quantity, 0);
 
+  // Проверка дали има артикули, които могат да бъдат прехвърлени
+  const hasTransferableItems = cartItems.length > 0 || pendingItems.length > 0;
+
   return (
     <DefaultLayout>
-      <div style={{ marginBottom: 24 }}>
+      <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h2>Работиш на маса: <b>{table.name}</b></h2>
+        <Button 
+          type="default" 
+          icon={<SwapOutlined />} 
+          onClick={showTransferModal} 
+          disabled={!hasTransferableItems}
+          style={{ marginLeft: 16 }}
+        >
+          Прехвърли артикули
+        </Button>
       </div>
       <Row gutter={24}>
         {/* Категории в ляво */}
@@ -345,6 +434,8 @@ const Homepage = () => {
           </div>
         </Col>
       </Row>
+
+      {/* Модален прозорец за създаване на сметка */}
       <Modal
         title="Създай сметка"
         visible={billPopup}
@@ -379,6 +470,14 @@ const Homepage = () => {
           </div>
         </Form>
       </Modal>
+
+      {/* Модален прозорец за прехвърляне на артикули */}
+      <TransferItemsModal
+        visible={transferModalVisible}
+        onCancel={handleTransferCancel}
+        currentTableId={tableId}
+        currentTableName={table.name}
+      />
     </DefaultLayout>
   );
 };
