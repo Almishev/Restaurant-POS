@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useCallback } from "react";
 import DefaultLayout from "./../components/DefaultLayout";
 import axios from "axios";
-import { Row, Col, message, Table, Button, Modal, Form, Input, Select } from "antd";
+import { Row, Col, message, Table, Button, Modal, Form, Input, Select, Drawer } from "antd";
 import { useDispatch } from "react-redux";
 import { useNavigate, useParams } from "react-router-dom";
-import { CheckCircleTwoTone, SwapOutlined } from '@ant-design/icons';
+import { CheckCircleTwoTone, SwapOutlined, MenuOutlined, DeleteOutlined } from '@ant-design/icons';
 import TransferItemsModal from "../components/TransferItemsModal";
 
 const Homepage = () => {
@@ -22,6 +22,7 @@ const Homepage = () => {
   const [form] = Form.useForm();
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const [drawerVisible, setDrawerVisible] = useState(false);
   // Зареждане на масата по tableId
   const fetchTable = useCallback(async () => {
     try {
@@ -281,10 +282,10 @@ const Homepage = () => {
       title: "Количество",
       dataIndex: "quantity",
       render: (quantity, record) => (
-        <div>
-          <Button size="small" onClick={() => handleChangeQuantity(record, 1)}>+</Button>
-          <b style={{ margin: "0 8px" }}>{quantity}</b>
-          <Button size="small" onClick={() => handleChangeQuantity(record, -1)} disabled={quantity <= 1}>-</Button>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+          <Button size="small" style={{ minWidth: 28, height: 28, padding: 0 }} onClick={() => handleChangeQuantity(record, 1)}>+</Button>
+          <b style={{ margin: "0 4px", minWidth: 18, textAlign: 'center', display: 'inline-block' }}>{quantity}</b>
+          <Button size="small" style={{ minWidth: 28, height: 28, padding: 0 }} onClick={() => handleChangeQuantity(record, -1)} disabled={quantity <= 1}>-</Button>
         </div>
       ),
     },
@@ -292,9 +293,15 @@ const Homepage = () => {
       title: "Действие",
       dataIndex: "_id",
       render: (_, record) => (
-        <Button danger size="small" onClick={() => handleRemoveFromCart(record)}>
-          Премахни
-        </Button>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
+          <Button
+            danger
+            size="small"
+            icon={<DeleteOutlined style={{ fontSize: 20 }} />}
+            onClick={() => handleRemoveFromCart(record)}
+            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, width: 32, height: 32 }}
+          />
+        </div>
       ),
     },
   ];
@@ -352,7 +359,7 @@ const Homepage = () => {
           icon={<SwapOutlined />} 
           onClick={showTransferModal} 
           disabled={!hasTransferableItems}
-          style={{ marginLeft: 16 }}
+          style={{ marginLeft: 16, background: '#003366', color: '#fff', border: 'none' }}
         >
           Прехвърли артикули
         </Button>
@@ -360,18 +367,55 @@ const Homepage = () => {
       <Row gutter={24}>
         {/* Категории в ляво */}
         <Col xs={24} md={6} lg={5}>
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
-            {categories.map((category) => (
-              <div
-                key={category._id}
-                className={`d-flex category ${selectedCategory === category.name && "category-active"}`}
-                style={{ width: "100%", marginBottom: 16,background:"#008080", justifyContent: "flex-start", cursor: "pointer" }}
-                onClick={() => setSelectedCategory(category.name)}
+          {/* Мобилен изглед: hamburger бутон и Drawer */}
+          {window.innerWidth < 768 ? (
+            <>
+              <Button
+                icon={<MenuOutlined />}
+                onClick={() => setDrawerVisible(true)}
+                style={{ marginBottom: 16, background: '#003366', color: '#fff', border: 'none' }}
               >
-                <h4 style={{color: "silver"}}>{category.name}</h4>
-              </div>
-            ))}
-          </div>
+                Категории
+              </Button>
+              <Drawer
+                title="Категории"
+                placement="left"
+                onClose={() => setDrawerVisible(false)}
+                visible={drawerVisible}
+                bodyStyle={{ padding: 0 }}
+              >
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
+                  {categories.map((category) => (
+                    <div
+                      key={category._id}
+                      className={`d-flex category ${selectedCategory === category.name && "category-active"}`}
+                      style={{ width: "100%", marginBottom: 16, background: "#008080", justifyContent: "flex-start", cursor: "pointer" }}
+                      onClick={() => {
+                        setSelectedCategory(category.name);
+                        setDrawerVisible(false);
+                      }}
+                    >
+                      <h4 style={{ color: "silver" }}>{category.name}</h4>
+                    </div>
+                  ))}
+                </div>
+              </Drawer>
+            </>
+          ) : (
+            // Десктоп изглед: страничен списък
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
+              {categories.map((category) => (
+                <div
+                  key={category._id}
+                  className={`d-flex category ${selectedCategory === category.name && "category-active"}`}
+                  style={{ width: "100%", marginBottom: 16, background: "#008080", justifyContent: "flex-start", cursor: "pointer" }}
+                  onClick={() => setSelectedCategory(category.name)}
+                >
+                  <h4 style={{ color: "silver" }}>{category.name}</h4>
+                </div>
+              ))}
+            </div>
+          )}
         </Col>
         {/* Продукти в центъра */}
         <Col xs={24} md={10} lg={11}>
@@ -380,10 +424,38 @@ const Homepage = () => {
               .filter((i) => i.category === selectedCategory)
               .map((item) => (
                 <Col xs={24} sm={12} md={24} lg={12} key={item._id}>
-                  <div style={{ border: "1px solid #eee", borderRadius: 8, padding: 16, textAlign: "center", background: "#E0E0E0" }}>
-                    <h4>{item.name}</h4>
-                    <div style={{ margin: "8px 0" }}><b>{item.price} лв</b></div>
-                    <Button type="primary" onClick={() => handleAddToCart(item)}>
+                  <div style={{
+                    border: "1px solid #eee",
+                    borderRadius: 12,
+                    padding: 8,
+                    background: "#f4f8fb",
+                    marginBottom: 8,
+                    boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
+                    minHeight: 40,
+                    display: 'flex',
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: 6
+                  }}>
+                    <span style={{ fontSize: 15, fontWeight: 600, color: '#003366', flex: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
+                    <span style={{ fontSize: 14, color: '#333', flex: 1, textAlign: 'center', minWidth: 48 }}><b>{item.price} лв</b></span>
+                    <Button
+                      type="primary"
+                      onClick={() => handleAddToCart(item)}
+                      style={{
+                        background: '#003366',
+                        color: '#fff',
+                        fontWeight: 600,
+                        fontSize: 14,
+                        borderRadius: 6,
+                        height: 32,
+                        minWidth: 64,
+                        padding: '0 8px',
+                        flex: 1
+                      }}
+                      size="middle"
+                    >
                       Добави
                     </Button>
                   </div>

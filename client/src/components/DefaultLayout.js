@@ -67,7 +67,11 @@ const DefaultLayout = ({ children }) => {
   return (
     <Layout>
       {loading && <Spinner />}
-      <Sider trigger={null} collapsible collapsed={collapsed}>
+      <Sider trigger={null} collapsible collapsed={collapsed} 
+        breakpoint="md"
+        collapsedWidth="0"
+        onBreakpoint={broken => setCollapsed(broken)}
+      >
         <div className="logo">
           <h1 className="text-center text-light font-wight-bold mt-4">POS Система</h1>
         </div>
@@ -120,15 +124,22 @@ const DefaultLayout = ({ children }) => {
           <Menu.Item key="/reports" icon={<CopyOutlined />}>
             <Link to="/reports">Отчети</Link>
           </Menu.Item>
+          {userRole === "admin" && (
           <Menu.Item key="/storno" icon={<RollbackOutlined />}>
             <Link to="/storno">Сторниране</Link>
           </Menu.Item>
+          )}
+          
+          {userRole === "admin" && (
           <Menu.Item key="/storno-list" icon={<FileDoneOutlined />}>
             <Link to="/storno-list">Сторно Операции</Link>
           </Menu.Item>
+          )}
+          {userRole === "admin" && (
           <Menu.Item key="/storno-report" icon={<FileSearchOutlined />}>
             <Link to="/storno-report">Отчет Сторно</Link>
           </Menu.Item>
+          )}
           <Menu.Item
             key="/logout"
             icon={<LogoutOutlined />}

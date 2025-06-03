@@ -62,3 +62,45 @@
   margin-top: 10px;
   font-weight: bold;
 }
+
+@media (max-width: 768px) {
+  .site-layout .site-layout-background {
+    margin: 2px !important;
+    padding: 4px !important;
+    border-radius: 0 !important;
+  }
+  .ant-layout-header {
+    padding: 0 4px !important;
+    min-height: 48px !important;
+  }
+  .ant-menu-item {
+    font-size: 16px !important;
+    padding: 12px 8px !important;
+  }
+  .ant-btn {
+    font-size: 16px !important;
+    padding: 10px 16px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    height: 36px !important;
+    line-height: 36px !important;
+    padding-top: 0 !important;
+    padding-bottom: 0 !important;
+  }
+  .ant-table {
+    font-size: 14px !important;
+    overflow-x: auto !important;
+  }
+  .ant-table-content {
+    overflow-x: auto !important;
+  }
+  .logo h1 {
+    font-size: 18px !important;
+    margin-top: 8px !important;
+  }
+}
+
+body {
+  background: #f4f8fb !important;
+}
