@@ -15,6 +15,7 @@ const BillsPage = () => {
   const [selectedBill, setSelectedBill] = useState(null);
   const [userRole, setUserRole] = useState("");
   const [userId, setUserId] = useState("");
+  const [servingUserName, setServingUserName] = useState("");
   
   // Hook for navigation
   const navigate = useNavigate();
@@ -79,7 +80,6 @@ const BillsPage = () => {
       title: "Име на клиент",
       dataIndex: "customerName",
     },
-    { title: "Контакт", dataIndex: "customerNumber" },
     { title: "Субтотал", dataIndex: "subTotal" },
     { title: "Обща сума", dataIndex: "totalAmount" },
     {
@@ -122,6 +122,23 @@ const BillsPage = () => {
     },
   ];
   console.log(selectedBill);
+  // Когато се избере сметка, вземи името на обслужващия потребител
+  useEffect(() => {
+    if (selectedBill && selectedBill.userId) {
+      // Ако вече има име, не прави заявка
+      if (selectedBill.userName) {
+        setServingUserName(selectedBill.userName);
+      } else {
+        axios.get(`/api/users/get-user/${selectedBill.userId}`)
+          .then(res => {
+            setServingUserName(res.data.name);
+          })
+          .catch(() => setServingUserName(""));
+      }
+    } else {
+      setServingUserName("");
+    }
+  }, [selectedBill]);
   return (
     <DefaultLayout>
       <div className="d-flex justify-content-between">
@@ -153,7 +170,7 @@ const BillsPage = () => {
               <div className="logo" />
               <div className="info">
                 <h2>POS Система</h2>
-                <p> Контакт : 123456 | София</p>
+                <p> Контакт : 123456 | Ресторант</p>
               </div>
               {/*End Info*/}
             </center>
@@ -161,9 +178,7 @@ const BillsPage = () => {
             <div id="mid">
               <div className="mt-2">
                 <p>
-                  Име на клиент : <b>{selectedBill.customerName}</b>
-                  <br />
-                  Телефон : <b>{selectedBill.customerNumber}</b>
+                  Маса : <b>{selectedBill.customerName}</b>
                   <br />
                   Начин на плащане: <b> {selectedBill.paymentMode === 'cash' ? 'В брой' : selectedBill.paymentMode === 'card' ? 'Карта' : selectedBill.paymentMode} </b>
                   <br />

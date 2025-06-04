@@ -6,7 +6,6 @@ import ItemPage from "./pages/ItemPage";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import BillsPage from "./pages/BillsPage";
-import CutomerPage from "./pages/CutomerPage";
 import CategoriesPage from "./pages/CategoriesPage";
 import TablesPage from "./pages/TablesPage";
 import KitchenPage from "./pages/KitchenPage";
@@ -70,14 +69,6 @@ function App() {
             element={
               <ProtectedRoute>
                 <BillsPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/customers"
-            element={
-              <ProtectedRoute>
-                <CutomerPage />
               </ProtectedRoute>
             }
           />

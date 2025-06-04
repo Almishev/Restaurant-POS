@@ -109,9 +109,6 @@ const DefaultLayout = ({ children }) => {
             <Link to="/categories">Категории</Link>
           </Menu.Item>
           )}
-          <Menu.Item key="/customers" icon={<UserOutlined />}>
-            <Link to="/customers">Клиенти</Link>
-          </Menu.Item>
           <Menu.Item key="/tables" icon={<TableOutlined />}>
             <Link to="/tables">Маси</Link>
           </Menu.Item>

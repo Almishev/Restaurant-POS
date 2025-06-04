@@ -51,8 +51,6 @@ const createStornoController = async (req, res) => {
       originalBillId,
       userId,
       userName,
-      customerName: originalBill.customerName,
-      customerPhone: originalBill.customerPhone,
       cartItems,
       subTotal,
       tax,

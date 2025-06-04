@@ -15,12 +15,6 @@ const stornoSchema = mongoose.Schema(
       type: String,
       required: true,
     },
-    customerName: {
-      type: String,
-    },
-    customerPhone: {
-      type: String,
-    },
     cartItems: {
       type: Array,
       required: true,

@@ -8,7 +8,6 @@ const Inventory = require('../models/inventoryModel');
 const addBillsController = async (req, res) => {
   try {
     console.log("Данни за нова сметка:", {
-      customerName: req.body.customerName,
       totalAmount: req.body.totalAmount,
       userId: req.body.userId
     });
@@ -84,7 +83,6 @@ const getBillsController = async (req, res) => {
     if (bills.length > 0) {
       console.log('Примерна намерена сметка:', {
         id: bills[0]._id,
-        customerName: bills[0].customerName,
         userId: bills[0].userId
       });
     }

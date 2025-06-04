@@ -5,6 +5,7 @@ const {
   getUsersController,
   updateUserController,
   deleteUserController,
+  getUserByUserIdController,
 } = require("./../controllers/userController");
 const Users = require("../models/userModel");
 
@@ -44,5 +45,8 @@ router.put("/update-user/:id", updateUserController);
 
 // DELETE изтриване на потребител
 router.delete("/delete-user/:id", deleteUserController);
+
+// Взимане на потребител по userId
+router.get("/get-user/:userId", getUserByUserIdController);
 
 module.exports = router;

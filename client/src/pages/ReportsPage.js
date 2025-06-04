@@ -131,7 +131,6 @@ const ReportsPage = () => {
 
   const columns = [
     { title: "Дата", dataIndex: "date", render: d => new Date(d).toLocaleString() },
-    { title: "Маса/Клиент", dataIndex: "customerName" },
     { title: "Сума", dataIndex: "totalAmount" },
     { title: "Плащане", dataIndex: "paymentMode" },
   ];

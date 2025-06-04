@@ -4,7 +4,7 @@ import axios from "axios";
 import { Row, Col, message, Table, Button, Modal, Form, Input, Select, Drawer } from "antd";
 import { useDispatch } from "react-redux";
 import { useNavigate, useParams } from "react-router-dom";
-import { CheckCircleTwoTone, SwapOutlined, MenuOutlined, DeleteOutlined } from '@ant-design/icons';
+import { CheckCircleTwoTone, SwapOutlined, MenuOutlined, DeleteOutlined, ShoppingCartOutlined } from '@ant-design/icons';
 import TransferItemsModal from "../components/TransferItemsModal";
 
 const Homepage = () => {
@@ -162,17 +162,9 @@ const Homepage = () => {
   // Изпрати към кухнята (само pendingItems)
   const handleSendToKitchen = async () => {
     try {
-      const user = localStorage.getItem("auth") ? JSON.parse(localStorage.getItem("auth")) : null;
-      // Добавям department към всеки item
-      const itemsWithDepartment = pendingItems.map(item => {
-        if (item.department) return item;
-        const found = itemsData.find(i => i._id === item._id);
-        return { ...item, department: found ? found.department : undefined };
-      });
       await axios.post("/api/kitchen/send-order", {
         tableName: table.name,
-        items: itemsWithDepartment,
-        waiterName: user ? user.name : ""
+        items: pendingItems,
       });
         // Добавяме status: "Изпратено" към всеки елемент преди да го преместим в cartItems
       const itemsWithStatus = pendingItems.map(item => {
@@ -216,24 +208,19 @@ const Homepage = () => {
   const handleSubmitBill = async (value) => {
     try {
       const allItems = [...cartItems, ...pendingItems];
-      const total = allItems.reduce((sum, i) => sum + i.price * i.quantity, 0);        const userData = JSON.parse(localStorage.getItem("auth"));
-      console.log("Потребителски данни:", userData);
+      const total = allItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
       
       const newObject = {
         ...value,
-        customerName: value.customerName || table.name,
         cartItems: allItems,
         subTotal: total,
         totalAmount: Number(total),
-        userId: userData.userId, // Използваме userId, а не _id
         tableId: tableId,
       };
       
       // Показване на обекта, който изпращаме
       console.log("Изпращане на данни за сметка:", { 
-        customerName: newObject.customerName,
         total: newObject.totalAmount,
-        userId: newObject.userId 
       });
       await axios.post("/api/bills/add-bills", newObject);
       message.success("Сметката е генерирана");
@@ -389,13 +376,13 @@ const Homepage = () => {
                     <div
                       key={category._id}
                       className={`d-flex category ${selectedCategory === category.name && "category-active"}`}
-                      style={{ width: "100%", marginBottom: 16, background: "#008080", justifyContent: "flex-start", cursor: "pointer" }}
+                      style={{ width: "100%", marginBottom: 16, background: "#003366", justifyContent: "flex-start", cursor: "pointer" }}
                       onClick={() => {
                         setSelectedCategory(category.name);
                         setDrawerVisible(false);
                       }}
                     >
-                      <h4 style={{ color: "silver" }}>{category.name}</h4>
+                      <h4 style={{ color: "white" }}>{category.name}</h4>
                     </div>
                   ))}
                 </div>
@@ -408,10 +395,10 @@ const Homepage = () => {
                 <div
                   key={category._id}
                   className={`d-flex category ${selectedCategory === category.name && "category-active"}`}
-                  style={{ width: "100%", marginBottom: 16, background: "#008080", justifyContent: "flex-start", cursor: "pointer" }}
+                  style={{ width: "100%", marginBottom: 16, background: "#003366", justifyContent: "flex-start", cursor: "pointer" }}
                   onClick={() => setSelectedCategory(category.name)}
                 >
-                  <h4 style={{ color: "silver" }}>{category.name}</h4>
+                  <h4 style={{ color: "white" }}>{category.name}</h4>
                 </div>
               ))}
             </div>
@@ -428,7 +415,7 @@ const Homepage = () => {
                     border: "1px solid #eee",
                     borderRadius: 12,
                     padding: 8,
-                    background: "#f4f8fb",
+                    background: "#CED0E8",
                     marginBottom: 8,
                     boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
                     minHeight: 40,
@@ -450,13 +437,16 @@ const Homepage = () => {
                         fontSize: 14,
                         borderRadius: 6,
                         height: 32,
-                        minWidth: 64,
+                        minWidth: 40,
                         padding: '0 8px',
-                        flex: 1
+                        flex: 1,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
                       }}
                       size="middle"
                     >
-                      Добави
+                      <ShoppingCartOutlined style={{ fontSize: 20 }} />
                     </Button>
                   </div>
                 </Col>
@@ -515,16 +505,13 @@ const Homepage = () => {
         footer={false}
       >
         <Form form={form} layout="vertical" onFinish={handleSubmitBill} initialValues={{ customerName: table.name }}>
-          <Form.Item name="customerName" label="Име на клиент">
-            <Input />
-          </Form.Item>
-          <Form.Item name="customerNumber" label="Контакт">
+          <Form.Item name="customerName" label="Манса">
             <Input />
           </Form.Item>
           <Form.Item name="paymentMode" label="Метод на плащане" style={{ minWidth: 220 }}>
             <Select style={{ minWidth: 220 }}>
-              <Select.Option value="cash">Брой</Select.Option>
-              <Select.Option value="card">Карта</Select.Option>
+              <Select.Option value="Брой">Брой</Select.Option>
+              <Select.Option value="Карта">Карта</Select.Option>
             </Select>
           </Form.Item>
           <div className="bill-it">

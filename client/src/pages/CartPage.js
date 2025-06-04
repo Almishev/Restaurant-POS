@@ -166,13 +166,6 @@ const CartPage = () => {
         footer={false}
       >
         <Form layout="vertical" onFinish={handleSubmit}>
-          <Form.Item name="customerName" label="Име на клиент">
-            <Input />
-          </Form.Item>
-          <Form.Item name="customerNumber" label="Контакт">
-            <Input />
-          </Form.Item>
-
           <Form.Item name="paymentMode" label="Метод на плащане" style={{ minWidth: 220 }}>
             <Select style={{ minWidth: 220 }}>
               <Select.Option value="cash">Брой</Select.Option>
