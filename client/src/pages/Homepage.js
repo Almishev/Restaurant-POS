@@ -167,6 +167,7 @@ const Homepage = () => {
       await axios.post("/api/kitchen/send-order", {
         tableName: table.name,
         items: pendingItems,
+        waiterName: userData?.name,
       });
         // Добавяме status: "Изпратено" към всеки елемент преди да го преместим в cartItems
       const itemsWithStatus = pendingItems.map(item => {
@@ -218,8 +219,10 @@ const Homepage = () => {
       const total = allItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
       // Вземи userId на логнатия потребител
       const userId = userData?.userId;
+      console.log("[DEBUG] value от формата:", value);
       const newObject = {
         ...value,
+        customerName: table.name,
         cartItems: allItems,
         subTotal: total,
         totalAmount: Number(total),
@@ -525,7 +528,7 @@ const Homepage = () => {
       >
         <Form form={form} layout="vertical" onFinish={handleSubmitBill} initialValues={{ customerName: table.name, waiter: userData?.name }}>
           <Form.Item name="customerName" label="Манса">
-            <Input />
+            <Input disabled />
           </Form.Item>
           <Form.Item name="waiter" label="Сервитьор">
             <Input disabled />

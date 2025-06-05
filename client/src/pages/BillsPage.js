@@ -76,10 +76,7 @@ const BillsPage = () => {
   //able data
   const columns = [
     { title: "ID ", dataIndex: "_id" },
-    {
-      title: "Име на клиент",
-      dataIndex: "customerName",
-    },
+   
     { title: "Субтотал", dataIndex: "subTotal" },
     { title: "Обща сума", dataIndex: "totalAmount" },
     {
@@ -107,7 +104,7 @@ const BillsPage = () => {
             >
               Преглед
             </Button>
-            {canStorno && (
+            {canStorno && userRole === 'admin' && (
               <Button 
                 type="primary" 
                 danger
@@ -178,11 +175,13 @@ const BillsPage = () => {
             <div id="mid">
               <div className="mt-2">
                 <p>
-                  Маса : <b>{selectedBill.customerName}</b>
+                  Маса : <b>{selectedBill.customerName || "-"}</b>
                   <br />
-                  Начин на плащане: <b> {selectedBill.paymentMode === 'cash' ? 'В брой' : selectedBill.paymentMode === 'card' ? 'Карта' : selectedBill.paymentMode} </b>
+                  Обслужващ сервитьор: <b>{servingUserName || selectedBill.userName || "-"}</b>
                   <br />
-                  Дата : <b>{selectedBill.date.toString().substring(0, 10)}</b>
+                  Начин на плащане: <b>{selectedBill.paymentMode === 'cash' ? 'В брой' : selectedBill.paymentMode === 'card' ? 'Карта' : selectedBill.paymentMode || "-"}</b>
+                  <br />
+                  Дата : <b>{selectedBill.date && typeof selectedBill.date.toString === 'function' ? selectedBill.date.toString().substring(0, 10) : "-"}</b>
                   <br />
                 </p>
                 <hr style={{ margin: "5px" }} />

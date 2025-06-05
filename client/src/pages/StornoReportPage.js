@@ -17,6 +17,7 @@ import {
 import { PieChart } from 'react-minimal-pie-chart';
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
+import dayjs from "dayjs";
 
 const { RangePicker } = DatePicker;
 const { Title, Text } = Typography;
@@ -49,16 +50,15 @@ const StornoReportPage = () => {
         }
         
         // Инициално зареждане на отчета за последните 30 дни
-        const endDate = new Date();
-        const startDate = new Date();
-        startDate.setDate(startDate.getDate() - 30);
+        const endDate = dayjs();
+        const startDate = dayjs().subtract(30, 'day');
         
         setFilters({
           ...filters,
           dateRange: [startDate, endDate]
         });
         
-        generateReport(startDate, endDate, parsedUserData.role !== 'admin' ? parsedUserData.userId : '');
+        generateReport(startDate.toDate(), endDate.toDate(), parsedUserData.role !== 'admin' ? parsedUserData.userId : '');
       } catch (error) {
         console.log("Error parsing user data:", error);
       }
@@ -115,10 +115,10 @@ const StornoReportPage = () => {
     if (dates && dates.length === 2) {
       setFilters({
         ...filters,
-        dateRange: dates
+        dateRange: [dayjs(dates[0]), dayjs(dates[1])]
       });
       
-      generateReport(dates[0], dates[1], filters.userId);
+      generateReport(dates[0].toDate(), dates[1].toDate(), filters.userId);
     } else if (!dates) {
       setFilters({
         ...filters,
@@ -137,7 +137,7 @@ const StornoReportPage = () => {
     });
     
     if (filters.dateRange && filters.dateRange.length === 2) {
-      generateReport(filters.dateRange[0], filters.dateRange[1], value);
+      generateReport(filters.dateRange[0].toDate(), filters.dateRange[1].toDate(), value);
     } else {
       generateReport(null, null, value);
     }

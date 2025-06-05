@@ -1,6 +1,7 @@
 const Storno = require("../models/stornoModel");
 const Bills = require("../models/billsModel");
 const fiscalService = require("../services/fiscalService");
+const Report = require("../models/reportModel");
 
 // Създаване на сторно бон
 const createStornoController = async (req, res) => {
@@ -39,6 +40,12 @@ const createStornoController = async (req, res) => {
       return res.status(400).json({ 
         error: "Сторниране е възможно само в рамките на същата работна смяна (24 часа)" 
       });
+    }
+    
+    // Проверка дали бонът е включен в Z отчет
+    const zReport = await Report.findOne({ type: 'Z', bills: { $elemMatch: { $eq: originalBillId } } });
+    if (zReport) {
+      return res.status(400).json({ error: "Сторниране е възможно само на бонове, които не са включени в Z отчет!" });
     }
     
     // Изчисляване на стойности за избраните артикули

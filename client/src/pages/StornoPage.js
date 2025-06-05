@@ -322,12 +322,14 @@ const StornoPage = () => {
     {
       title: "Действия",
       render: (_, record) => (
-        <Button 
-          type="primary" 
-          onClick={() => openStornoModal(record)}
-        >
-          Сторниране
-        </Button>
+        userData?.role === 'admin' ? (
+          <Button 
+            type="primary" 
+            onClick={() => openStornoModal(record)}
+          >
+            Сторниране
+          </Button>
+        ) : null
       )
     }
   ];
@@ -396,7 +398,7 @@ const StornoPage = () => {
       />
 
       {/* Модален прозорец за сторниране */}
-      {selectedBill && (
+      {selectedBill && userData?.role === 'admin' && (
         <Modal
           title="Сторниране на фискален бон"
           visible={stornoModalVisible}
