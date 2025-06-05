@@ -15,9 +15,11 @@ const TransferItemsModal = ({ visible, onCancel, currentTableId, currentTableNam
   useEffect(() => {
     const fetchTables = async () => {
       try {
+        const userData = localStorage.getItem("auth") ? JSON.parse(localStorage.getItem("auth")) : null;
+        const userId = userData?.userId;
         const res = await axios.get("/api/tables/get-tables");
-        // Филтрирай текущата маса от списъка
-        const otherTables = res.data.filter(table => table._id !== currentTableId);
+        // Филтрирай текущата маса и масите, които не са на този сервитьор
+        const otherTables = res.data.filter(table => table._id !== currentTableId && table.createdBy === userId);
         setTables(otherTables);
       } catch (error) {
         message.error("Грешка при зареждане на масите!");

@@ -6,6 +6,7 @@ import { useDispatch } from "react-redux";
 import { useNavigate, useParams } from "react-router-dom";
 import { CheckCircleTwoTone, SwapOutlined, MenuOutlined, DeleteOutlined, ShoppingCartOutlined } from '@ant-design/icons';
 import TransferItemsModal from "../components/TransferItemsModal";
+import TransferTableModal from "../components/TransferTableModal";
 
 const Homepage = () => {
   const { tableId } = useParams();
@@ -19,6 +20,7 @@ const Homepage = () => {
   const [kitchenOrders, setKitchenOrders] = useState([]);
   const [billPopup, setBillPopup] = useState(false);
   const [transferModalVisible, setTransferModalVisible] = useState(false);
+  const [transferTableModalVisible, setTransferTableModalVisible] = useState(false);
   const [form] = Form.useForm();
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -204,24 +206,27 @@ const Homepage = () => {
     setBillPopup(true);
   };
 
+  // Вземи логнатия потребител
+  const userData = localStorage.getItem("auth") ? JSON.parse(localStorage.getItem("auth")) : null;
+
   // Генериране на сметка
   const handleSubmitBill = async (value) => {
     try {
+      console.log("[DEBUG] cartItems:", cartItems);
+      console.log("[DEBUG] pendingItems:", pendingItems);
       const allItems = [...cartItems, ...pendingItems];
       const total = allItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
-      
+      // Вземи userId на логнатия потребител
+      const userId = userData?.userId;
       const newObject = {
         ...value,
         cartItems: allItems,
         subTotal: total,
         totalAmount: Number(total),
         tableId: tableId,
+        userId: userId, // добавяме userId
       };
-      
-      // Показване на обекта, който изпращаме
-      console.log("Изпращане на данни за сметка:", { 
-        total: newObject.totalAmount,
-      });
+      console.log("[DEBUG] newObject за изпращане към /api/bills/add-bills:", newObject);
       await axios.post("/api/bills/add-bills", newObject);
       message.success("Сметката е генерирана");
       setBillPopup(false);
@@ -337,19 +342,33 @@ const Homepage = () => {
   // Проверка дали има артикули, които могат да бъдат прехвърлени
   const hasTransferableItems = cartItems.length > 0 || pendingItems.length > 0;
 
+  const handleTableTransferSuccess = () => {
+    localStorage.removeItem("selectedTable");
+    navigate("/tables");
+  };
+
   return (
     <DefaultLayout>
       <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <h2>Работиш на маса: <b>{table.name}</b></h2>
-        <Button 
-          type="default" 
-          icon={<SwapOutlined />} 
-          onClick={showTransferModal} 
-          disabled={!hasTransferableItems}
-          style={{ marginLeft: 16, background: '#003366', color: '#fff', border: 'none' }}
-        >
-          Прехвърли артикули
-        </Button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <Button 
+            type="default" 
+            icon={<SwapOutlined />} 
+            onClick={showTransferModal} 
+            disabled={!hasTransferableItems}
+            style={{ marginLeft: 16, background: '#003366', color: '#fff', border: 'none' }}
+          >
+            Прехвърли артикули
+          </Button>
+          <Button
+            type="default"
+            onClick={() => setTransferTableModalVisible(true)}
+            style={{ background: '#A3A7D2', color: '#003366', border: 'none' }}
+          >
+            Прехвърли маса
+          </Button>
+        </div>
       </div>
       <Row gutter={24}>
         {/* Категории в ляво */}
@@ -486,10 +505,10 @@ const Homepage = () => {
               <h2>Общо: {grandTotal} лв</h2>
             </div>
             <div style={{ display: "flex", gap: 12, marginTop: 24, justifyContent: "flex-end" }}>
-              <Button type="default" style={{background:"#FFC300"}} onClick={handleSendToKitchen} disabled={pendingItems.length === 0}>
+              <Button type="default" style={{background:"#A3A7D2", borderRadius: "12px" }} onClick={handleSendToKitchen} disabled={pendingItems.length === 0}>
                 Изпрати към кухнята
               </Button>
-              <Button type="primary" onClick={handleGenerateBillClick} disabled={grandTotal === 0}>
+              <Button type="primary" style={{ borderRadius: "12px" }} onClick={handleGenerateBillClick} disabled={grandTotal === 0}>
                 Генерирай сметка
               </Button>
             </div>
@@ -504,11 +523,19 @@ const Homepage = () => {
         onCancel={() => setBillPopup(false)}
         footer={false}
       >
-        <Form form={form} layout="vertical" onFinish={handleSubmitBill} initialValues={{ customerName: table.name }}>
+        <Form form={form} layout="vertical" onFinish={handleSubmitBill} initialValues={{ customerName: table.name, waiter: userData?.name }}>
           <Form.Item name="customerName" label="Манса">
             <Input />
           </Form.Item>
-          <Form.Item name="paymentMode" label="Метод на плащане" style={{ minWidth: 220 }}>
+          <Form.Item name="waiter" label="Сервитьор">
+            <Input disabled />
+          </Form.Item>
+          <Form.Item 
+            name="paymentMode" 
+            label="Метод на плащане" 
+            style={{ minWidth: 220 }}
+            rules={[{ required: true, message: 'Моля, изберете метод на плащане' }]}
+          >
             <Select style={{ minWidth: 220 }}>
               <Select.Option value="Брой">Брой</Select.Option>
               <Select.Option value="Карта">Карта</Select.Option>
@@ -536,6 +563,15 @@ const Homepage = () => {
         onCancel={handleTransferCancel}
         currentTableId={tableId}
         currentTableName={table.name}
+      />
+
+      {/* Модален прозорец за прехвърляне на маса */}
+      <TransferTableModal
+        visible={transferTableModalVisible}
+        onCancel={() => setTransferTableModalVisible(false)}
+        tableId={tableId}
+        currentWaiterName={table.createdBy}
+        onTransferSuccess={handleTableTransferSuccess}
       />
     </DefaultLayout>
   );

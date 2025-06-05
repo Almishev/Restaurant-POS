@@ -202,4 +202,21 @@ router.post("/transfer-items", async (req, res) => {
   }
 });
 
+// PUT прехвърляне на маса към друг сервитьор
+router.put("/transfer-table", async (req, res) => {
+  try {
+    const { tableId, newUserId } = req.body;
+    if (!tableId || !newUserId) {
+      return res.status(400).json({ message: "Липсва tableId или newUserId!" });
+    }
+    const updated = await Table.findByIdAndUpdate(tableId, { createdBy: newUserId }, { new: true });
+    if (!updated) {
+      return res.status(404).json({ message: "Масата не е намерена!" });
+    }
+    res.json({ message: "Масата е прехвърлена успешно!", table: updated });
+  } catch (error) {
+    res.status(500).json({ message: "Грешка при прехвърляне на масата!", error: error.message });
+  }
+});
+
 module.exports = router;

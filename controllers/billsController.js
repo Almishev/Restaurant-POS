@@ -152,7 +152,10 @@ const getReportController = async (req, res) => {
     const totalAmount = bills.reduce((sum, b) => sum + (b.totalAmount || 0), 0);
     const totalBills = bills.length;
     const byPayment = bills.reduce((acc, b) => {
-      acc[b.paymentMode] = (acc[b.paymentMode] || 0) + (b.totalAmount || 0);
+      let key = b.paymentMode;
+      if (key === "Брой") key = "cash";
+      if (key === "Карта") key = "card";
+      acc[key] = (acc[key] || 0) + (b.totalAmount || 0);
       return acc;
     }, {});
     // Разбивка по артикули
