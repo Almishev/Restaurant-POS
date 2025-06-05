@@ -64,6 +64,8 @@ const getBillsController = async (req, res) => {
     } else {
       console.log(`Показване на всички сметки (admin)`);
     }
+    // Винаги изключвай сторнираните сметки
+    query.isStornoed = { $ne: true };
     
     // Изведи всички сметки, които са в базата и техните полета userId
     const allBills = await billsModel.find({});
@@ -135,6 +137,8 @@ const getReportController = async (req, res) => {
     
     console.log(`[GET REPORT] Финален филтър за търсене: ${JSON.stringify(filter)}`);
     
+    // Изключи сторнираните сметки
+    filter.isStornoed = { $ne: true };
     const bills = await billsModel.find(filter);
     console.log(`[GET REPORT] Намерени ${bills.length} сметки по зададения филтър`);
     

@@ -5,7 +5,7 @@ import { EyeOutlined } from "@ant-design/icons";
 import { useReactToPrint } from "react-to-print";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
-import { Modal, Button, Table } from "antd";
+import { Modal, Button, Table, message } from "antd";
 import "../styles/InvoiceStyles.css";
 const BillsPage = () => {
   const componentRef = useRef();
@@ -16,6 +16,10 @@ const BillsPage = () => {
   const [userRole, setUserRole] = useState("");
   const [userId, setUserId] = useState("");
   const [servingUserName, setServingUserName] = useState("");
+  const [stornoModalVisible, setStornoModalVisible] = useState(false);
+  const [billToStorno, setBillToStorno] = useState(null);
+  const [stornoReason, setStornoReason] = useState("");
+  const [stornoLoading, setStornoLoading] = useState(false);
   
   // Hook for navigation
   const navigate = useNavigate();
@@ -108,7 +112,11 @@ const BillsPage = () => {
               <Button 
                 type="primary" 
                 danger
-                onClick={() => navigate(`/storno`, { state: { billId: record._id } })}
+                onClick={() => {
+                  setBillToStorno(record);
+                  setStornoReason("");
+                  setStornoModalVisible(true);
+                }}
               >
                 Сторниране
               </Button>
@@ -266,6 +274,64 @@ const BillsPage = () => {
           {/* ============ invoice modal ends ==============  */}
         </Modal>
       )}
+
+      {/* Модал за сторниране */}
+      <Modal
+        title="Сторниране на сметка"
+        visible={stornoModalVisible}
+        onOk={async () => {
+          if (!stornoReason) {
+            message.error("Моля, изберете причина за сторниране!");
+            return;
+          }
+          setStornoLoading(true);
+          try {
+            dispatch({ type: "SHOW_LOADING" });
+            await axios.post("/api/stornos/create-storno", {
+              originalBillId: billToStorno._id,
+              reason: stornoReason,
+              reasonText: "",
+              cartItems: billToStorno.cartItems,
+              subTotal: billToStorno.subTotal,
+              tax: billToStorno.tax,
+              totalAmount: billToStorno.totalAmount,
+              paymentMode: billToStorno.paymentMode,
+              userId: userId,
+              userName: servingUserName || "admin"
+            });
+            message.success("Сторнирането е успешно!");
+            setStornoModalVisible(false);
+            setBillToStorno(null);
+            setStornoReason("");
+            getAllBills();
+          } catch (error) {
+            message.error("Грешка при сторниране!");
+          } finally {
+            setStornoLoading(false);
+            dispatch({ type: "HIDE_LOADING" });
+          }
+        }}
+        onCancel={() => setStornoModalVisible(false)}
+        okText="Сторнирай"
+        cancelText="Отказ"
+        confirmLoading={stornoLoading}
+      >
+        <p>Сигурни ли сте, че искате да сторнирате цялата сметка?</p>
+        <div style={{ marginTop: 16 }}>
+          <label>Причина за сторниране:</label>
+          <select
+            value={stornoReason}
+            onChange={e => setStornoReason(e.target.value)}
+            style={{ width: "100%", marginTop: 8 }}
+          >
+            <option value="">-- Изберете причина --</option>
+            <option value="operatorError">Операторска грешка</option>
+            <option value="returnedItems">Върната стока</option>
+            <option value="defectiveGoods">Дефектна стока</option>
+            <option value="other">Друго</option>
+          </select>
+        </div>
+      </Modal>
     </DefaultLayout>
   );
 };

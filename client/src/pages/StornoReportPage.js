@@ -90,6 +90,11 @@ const StornoReportPage = () => {
         params.endDate = endDate.toISOString();
       }
       
+      // Винаги подавай userId и role
+      if (userData) {
+        params.userId = userData.userId;
+        params.role = userData.role;
+      }
       if (userId) {
         params.userId = userId;
       }
@@ -254,7 +259,7 @@ const StornoReportPage = () => {
                 onChange={handleUserChange}
               >
                 {users.map(user => (
-                  <Option key={user._id} value={user._id}>{user.name}</Option>
+                  <Option key={user._id} value={user.userId}>{user.name}</Option>
                 ))}
               </Select>
             </Col>

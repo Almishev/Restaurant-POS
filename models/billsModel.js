@@ -28,6 +28,10 @@ const billSchema = mongoose.Schema(
       type: String,
       required: true,
     },
+    isStornoed: {
+      type: Boolean,
+      default: false,
+    },
   },
   { timestamps: true }
 );

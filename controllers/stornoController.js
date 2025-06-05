@@ -71,6 +71,9 @@ const createStornoController = async (req, res) => {
     // Запис в базата данни
     const newStorno = await stornoBill.save();
     
+    // Маркирай оригиналната сметка като сторнирана
+    await Bills.findByIdAndUpdate(originalBillId, { isStornoed: true });
+    
     // Интеграция с фискално устройство
     try {
       const fiscalResult = await fiscalService.printStornoBon(

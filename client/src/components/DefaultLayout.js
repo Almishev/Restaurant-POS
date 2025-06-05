@@ -121,13 +121,7 @@ const DefaultLayout = ({ children }) => {
           <Menu.Item key="/reports" icon={<CopyOutlined />}>
             <Link to="/reports">Отчети</Link>
           </Menu.Item>
-          {userRole === "admin" && (
-          <Menu.Item key="/storno" icon={<RollbackOutlined />}>
-            <Link to="/storno">Сторниране</Link>
-          </Menu.Item>
-          )}
-          
-          {userRole === "admin" && (
+           {userRole === "admin" && (
           <Menu.Item key="/storno-list" icon={<FileDoneOutlined />}>
             <Link to="/storno-list">Сторно Операции</Link>
           </Menu.Item>

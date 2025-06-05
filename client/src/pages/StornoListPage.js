@@ -75,11 +75,9 @@ const StornoListPage = () => {
         params.endDate = dateRange[1].toISOString();
       }
       
-      // Филтриране по потребител, ако не е админ
+      // Винаги подавай userId и role
       if (user) {
-        if (user.role !== 'admin') {
-          params.userId = user.userId;
-        }
+        params.userId = user.userId;
         params.role = user.role;
       }
       

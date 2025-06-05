@@ -15,7 +15,6 @@ import InventoryPage from "./pages/InventoryPage";
 import RecipePage from "./pages/RecipePage";
 import ReportsArchivePage from "./pages/ReportsArchivePage";
 import UsersPage from "./pages/UsersPage";
-import StornoPage from "./pages/StornoPage";
 import StornoListPage from "./pages/StornoListPage";
 import StornoReportPage from "./pages/StornoReportPage";
 import { useEffect } from "react";
@@ -151,14 +150,6 @@ function App() {
               <AdminRoute>
                 <UsersPage />
               </AdminRoute>
-            }
-          />
-          <Route
-            path="/storno"
-            element={
-              <ProtectedRoute>
-                <StornoPage />
-              </ProtectedRoute>
             }
           />
           <Route
