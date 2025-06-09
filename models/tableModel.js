@@ -16,7 +16,8 @@ const tableSchema = mongoose.Schema(
         name: String,
         price: Number,
         quantity: Number,
-        status: { type: String, default: "Изпратено" }
+        status: { type: String, default: "Изпратено" },
+        note: { type: String, default: "" }
       }
     ],
     pendingItems: [
@@ -25,6 +26,7 @@ const tableSchema = mongoose.Schema(
         name: String,
         price: Number,
         quantity: Number,
+        note: { type: String, default: "" }
       }
     ],
     totalAmount: {

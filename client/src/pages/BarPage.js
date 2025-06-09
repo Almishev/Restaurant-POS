@@ -9,6 +9,7 @@ const BarPrintOrder = React.forwardRef(({ record }, ref) => (
     <div><b>Маса:</b> {record.table}</div>
     <div><b>Артикул:</b> {record.name}</div>
     <div><b>Количество:</b> {record.quantity}</div>
+    {record.note && <div><b>Забележка:</b> {record.note}</div>}
     <div style={{ marginTop: 16, fontSize: 14, color: '#888' }}>--- Наздраве! ---</div>
   </div>
 ));
@@ -45,10 +46,17 @@ const BarPage = () => {
           name: item.name,
           quantity: 0,
           orderIds: [],
+          note: item.note || ""
         };
       }
       grouped[key].quantity += item.quantity;
       grouped[key].orderIds.push({ orderId: order._id, itemName: item.name });
+      // Ако има няколко забележки, ги събираме
+      if (item.note && grouped[key].note.indexOf(item.note) === -1) {
+        grouped[key].note = grouped[key].note
+          ? grouped[key].note + '; ' + item.note
+          : item.note;
+      }
     });
   });
   const dataSource = Object.values(grouped).map((g, idx) => ({ ...g, key: idx }));
@@ -100,6 +108,13 @@ const BarPage = () => {
         const order = orders.find(o => o._id === record.orderIds[0].orderId);
         return order && order.waiterName ? order.waiterName : "-";
       }
+    },
+    {
+      title: "Забележка",
+      dataIndex: "note",
+      key: "note",
+      align: "center",
+      render: (note) => note ? <span style={{ color: '#ff4d4f' }}>{note}</span> : "-"
     },
     {
       title: "Действие",

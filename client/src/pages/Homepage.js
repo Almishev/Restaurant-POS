@@ -4,7 +4,7 @@ import axios from "axios";
 import { Row, Col, message, Table, Button, Modal, Form, Input, Select, Drawer } from "antd";
 import { useDispatch } from "react-redux";
 import { useNavigate, useParams } from "react-router-dom";
-import { CheckCircleTwoTone, SwapOutlined, MenuOutlined, DeleteOutlined, ShoppingCartOutlined } from '@ant-design/icons';
+import { CheckCircleTwoTone, SwapOutlined, MenuOutlined, DeleteOutlined, ShoppingCartOutlined, CloseOutlined, CheckOutlined } from '@ant-design/icons';
 import TransferItemsModal from "../components/TransferItemsModal";
 import TransferTableModal from "../components/TransferTableModal";
 
@@ -25,6 +25,9 @@ const Homepage = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const [drawerVisible, setDrawerVisible] = useState(false);
+  const [isNoteModalVisible, setIsNoteModalVisible] = useState(false);
+  const [noteValue, setNoteValue] = useState("");
+  const [itemToAdd, setItemToAdd] = useState(null);
   // Зареждане на масата по tableId
   const fetchTable = useCallback(async () => {
     try {
@@ -118,18 +121,43 @@ const Homepage = () => {
     };
   }, [tableId]);
 
-  // Добавяне на артикул към pendingItems
-  const handleAddToCart = async (item) => {
+  // Добавяне на артикул към pendingItems с модал за забележка
+  const handleAddToCartWithNote = (item) => {
+    console.log('[DEBUG] Натиснат е бутона за добавяне на артикул:', item);
+    setItemToAdd(item);
+    setNoteValue("");
+    setIsNoteModalVisible(true);
+  };
+
+  const handleNoteModalOk = async () => {
+    console.log('[DEBUG] Потвърдено добавяне с бележка:', noteValue, itemToAdd);
+    if (!itemToAdd) {
+      console.error('[DEBUG] itemToAdd е null!');
+      setIsNoteModalVisible(false);
+      return;
+    }
     let updatedPending;
+    const item = { ...itemToAdd, quantity: 1, note: noteValue };
     const existing = pendingItems.find((i) => i._id === item._id);
     if (existing) {
       updatedPending = pendingItems.map((i) =>
-        i._id === item._id ? { ...i, quantity: i.quantity + 1 } : i
+        i._id === item._id ? { ...i, quantity: i.quantity + 1, note: noteValue } : i
       );
     } else {
-      updatedPending = [...pendingItems, { ...item, quantity: 1 }];
+      updatedPending = [...pendingItems, item];
     }
+    console.log('[DEBUG] updatedPending:', updatedPending);
     await updatePendingInDB(updatedPending);
+    setIsNoteModalVisible(false);
+    setNoteValue("");
+    setItemToAdd(null);
+  };
+
+  const handleNoteModalCancel = () => {
+    console.log('[DEBUG] Затваряне на модала за забележка');
+    setIsNoteModalVisible(false);
+    setNoteValue("");
+    setItemToAdd(null);
   };
 
   // Премахване на артикул от pendingItems
@@ -149,16 +177,23 @@ const Homepage = () => {
   // Обновяване на pendingItems в MongoDB
   const updatePendingInDB = async (updatedPending) => {
     const newTotal = updatedPending.reduce((sum, i) => sum + i.price * i.quantity, 0);
+    console.log('[DEBUG] updatePendingInDB tableId:', tableId, 'updatedPending:', updatedPending, 'newTotal:', newTotal);
+    if (!tableId) {
+      console.error('[DEBUG] Липсва tableId!');
+      return;
+    }
     try {
-      await axios.put("/api/tables/update-table-pending-items", {
+      const res = await axios.put("/api/tables/update-table-pending-items", {
         tableId,
         pendingItems: updatedPending,
         totalAmount: newTotal,
       });
+      console.log('[DEBUG] updatePendingInDB response:', res.data);
       setPendingItems(updatedPending);
       setTotalAmount(newTotal);
     } catch (error) {
       message.error("Грешка при обновяване на поръчката!");
+      console.error('[DEBUG] Грешка при updatePendingInDB:', error);
     }
   };
   // Изпрати към кухнята (само pendingItems)
@@ -283,6 +318,11 @@ const Homepage = () => {
           <Button size="small" style={{ minWidth: 28, height: 28, padding: 0 }} onClick={() => handleChangeQuantity(record, -1)} disabled={quantity <= 1}>-</Button>
         </div>
       ),
+    },
+    {
+      title: "Забележка",
+      dataIndex: "note",
+      render: (note) => note ? <span style={{ color: '#ff4d4f' }}>{note}</span> : "-"
     },
     {
       title: "Действие",
@@ -451,7 +491,7 @@ const Homepage = () => {
                     <span style={{ fontSize: 14, color: '#333', flex: 1, textAlign: 'center', minWidth: 48 }}><b>{item.price} лв</b></span>
                     <Button
                       type="primary"
-                      onClick={() => handleAddToCart(item)}
+                      onClick={() => handleAddToCartWithNote(item)}
                       style={{
                         background: '#003366',
                         color: '#fff',
@@ -509,7 +549,7 @@ const Homepage = () => {
             </div>
             <div style={{ display: "flex", gap: 12, marginTop: 24, justifyContent: "flex-end" }}>
               <Button type="default" style={{background:"#A3A7D2", borderRadius: "12px" }} onClick={handleSendToKitchen} disabled={pendingItems.length === 0}>
-                Изпрати към кухнята
+                Маркирай поръчката
               </Button>
               <Button type="primary" style={{ borderRadius: "12px" }} onClick={handleGenerateBillClick} disabled={grandTotal === 0}>
                 Генерирай сметка
@@ -576,6 +616,41 @@ const Homepage = () => {
         currentWaiterName={table.createdBy}
         onTransferSuccess={handleTableTransferSuccess}
       />
+
+      {/* Модален прозорец за забележка */}
+      {console.log('[DEBUG] Рендер на модала, isNoteModalVisible:', isNoteModalVisible)}
+      <Modal
+        title="Добави забележка към артикула"
+        visible={isNoteModalVisible}
+        onOk={handleNoteModalOk}
+        onCancel={handleNoteModalCancel}
+        footer={
+          <div style={{ display: 'flex', flexDirection: 'row', justifyContent: 'flex-end', gap: 16 }}>
+            <Button
+              onClick={handleNoteModalCancel}
+              icon={<CloseOutlined />}
+              style={{ minWidth: 48, height: 40, fontSize: 20, borderRadius: 8 }}
+            />
+            <Button
+              type="primary"
+              onClick={handleNoteModalOk}
+              icon={<CheckOutlined />}
+              style={{ minWidth: 48, height: 40, fontSize: 20, borderRadius: 8 }}
+            />
+          </div>
+        }
+        style={{ maxWidth: 400, width: '90vw', top: 24, padding: 0 }}
+        bodyStyle={{ padding: 16, paddingTop: 8 }}
+        centered
+      >
+        <Input.TextArea
+          placeholder="Въведете забележка (по желание)"
+          value={noteValue}
+          onChange={(e) => setNoteValue(e.target.value)}
+          autoSize={{ minRows: 3, maxRows: 6 }}
+          style={{ fontSize: 18, borderRadius: 8, padding: 8 }}
+        />
+      </Modal>
     </DefaultLayout>
   );
 };
