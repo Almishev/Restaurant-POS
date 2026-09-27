@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useRef } from "react";
+﻿import React, { useState, useEffect, useRef } from "react";
 import DefaultLayout from "../components/DefaultLayout";
 import axios from "axios";
 import { Table, DatePicker, Button, Select, Card, Statistic, Row, Col, message, Typography, Empty } from "antd";
 import dayjs from "dayjs";
 import ReactToPrint from "react-to-print";
+import { formatPrice } from "../utils/formatPrice";
 const { RangePicker } = DatePicker;
 const { Title, Text } = Typography;
 
@@ -131,7 +132,7 @@ const ReportsPage = () => {
 
   const columns = [
     { title: "Дата", dataIndex: "date", render: d => new Date(d).toLocaleString() },
-    { title: "Сума", dataIndex: "totalAmount" },
+    { title: "Сума", dataIndex: "totalAmount", render: (v) => formatPrice(v) },
     { title: "Плащане", dataIndex: "paymentMode" },
   ];
 
@@ -209,10 +210,31 @@ const ReportsPage = () => {
               <Text type="secondary">Архивиран на: {new Date(report.createdAt).toLocaleString()}</Text>
             )}
             <Row gutter={16} style={{ marginBottom: 24, marginTop: 16 }}>
-              <Col><Statistic title="Обща сума" value={report.totalAmount} suffix="лв" /></Col>
+              <Col>
+                <Statistic
+                  title="Обща сума"
+                  value={Number(report.totalAmount) || 0}
+                  precision={2}
+                  suffix="€"
+                />
+              </Col>
               <Col><Statistic title="Брой сметки" value={report.totalBills} /></Col>
-              <Col><Statistic title="Плащане в брой" value={report.byPayment?.cash || 0} suffix="лв" /></Col>
-              <Col><Statistic title="Плащане с карта" value={report.byPayment?.card || 0} suffix="лв" /></Col>
+              <Col>
+                <Statistic
+                  title="Плащане в брой"
+                  value={Number(report.byPayment?.cash) || 0}
+                  precision={2}
+                  suffix="€"
+                />
+              </Col>
+              <Col>
+                <Statistic
+                  title="Плащане с карта"
+                  value={Number(report.byPayment?.card) || 0}
+                  precision={2}
+                  suffix="€"
+                />
+              </Col>
             </Row>
             <Card title="Разбивка по артикули" style={{ marginBottom: 24 }}>
               <Table
@@ -220,7 +242,7 @@ const ReportsPage = () => {
                 columns={[
                   { title: "Артикул", dataIndex: "name" },
                   { title: "Брой", dataIndex: "quantity" },
-                  { title: "Оборот", dataIndex: "total", render: v => v + " лв" },
+                  { title: "Оборот", dataIndex: "total", render: (v) => formatPrice(v) },
                 ]}
                 pagination={false}
                 size="small"

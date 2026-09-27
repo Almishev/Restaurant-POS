@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Modal, Select, Button, Table, message, Checkbox } from "antd";
 import axios from "axios";
+import { formatPrice } from "../utils/formatPrice";
 
 const { Option } = Select;
 
@@ -116,7 +117,7 @@ const TransferItemsModal = ({ visible, onCancel, currentTableId, currentTableNam
       ),
     },
     { title: "Артикул", dataIndex: "name" },
-    { title: "Цена", dataIndex: "price" },
+    { title: "Цена", dataIndex: "price", render: (price) => formatPrice(price) },
     { title: "Количество", dataIndex: "quantity" },
     { 
       title: "Статус", 
@@ -133,26 +134,29 @@ const TransferItemsModal = ({ visible, onCancel, currentTableId, currentTableNam
       title={`Прехвърляне на артикули от маса ${currentTableName}`}
       visible={visible}
       onCancel={onCancel}
-      footer={[
-        <Button key="back" onClick={onCancel}>
-          Отказ
-        </Button>,
-        <Button
-          key="submit"
-          type="primary"
-          loading={loading}
-          onClick={handleTransfer}
-          disabled={!selectedTableId || selectedItems.length === 0}
-        >
-          Прехвърли
-        </Button>,
-      ]}
-      width={800}
+      footer={
+        <div style={{ display: "flex", justifyContent: "space-between", width: "100%", gap: 12 }}>
+          <Button key="back" onClick={onCancel}>
+            Отказ
+          </Button>
+          <Button
+            key="submit"
+            type="primary"
+            loading={loading}
+            onClick={handleTransfer}
+            disabled={!selectedTableId || selectedItems.length === 0}
+          >
+            Прехвърли
+          </Button>
+        </div>
+      }
+      width="95%"
+      style={{ maxWidth: 800 }}
     >
       <div style={{ marginBottom: 20 }}>
         <Select
           placeholder="Изберете маса за прехвърляне"
-          style={{ width: 300 }}
+          style={{ width: "100%", maxWidth: 400 }}
           onChange={value => setSelectedTableId(value)}
         >
           {tables.map(table => (

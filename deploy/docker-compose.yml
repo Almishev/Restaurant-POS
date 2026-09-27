@@ -1,0 +1,30 @@
+# Restaurant deployment — pulls the published image from Docker Hub.
+# No source code needed on the restaurant PC/server.
+#
+# 1) Copy this folder (or this file + .env) to the restaurant machine
+# 2) docker compose pull
+# 3) docker compose up -d
+# 4) First time only: docker compose run --rm app node seeder.js
+
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - mongo_data:/data/db
+
+  app:
+    image: ${DOCKER_IMAGE:-antonalmishev/restaurant-pos:latest}
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8081}:8081"
+    environment:
+      PORT: "8081"
+      HOST: "0.0.0.0"
+      MONGO_URI: mongodb://mongo:27017/restaurant-pos
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+    depends_on:
+      - mongo
+
+volumes:
+  mongo_data:

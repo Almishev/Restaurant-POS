@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+﻿import React, { useState, useEffect, useRef } from 'react';
 import { reportService } from '../services/reportService';
 import { Table, Button, Typography, Tag, DatePicker, Input, Row, Col, Modal } from 'antd';
 import { EyeOutlined, PrinterOutlined, CheckCircleOutlined, CloseCircleOutlined, SearchOutlined } from '@ant-design/icons';
@@ -116,7 +116,7 @@ const ReportsArchivePage = () => {
     { title: 'Тип', dataIndex: 'type', key: 'type', width: 60, sorter: (a, b) => a.type.localeCompare(b.type) },
     { title: 'От', dataIndex: 'from', key: 'from', render: d => new Date(d).toLocaleString(), sorter: (a, b) => new Date(a.from) - new Date(b.from) },
     { title: 'До', dataIndex: 'to', key: 'to', render: d => new Date(d).toLocaleString(), sorter: (a, b) => new Date(a.to) - new Date(b.to) },
-    { title: 'Сума', dataIndex: 'totalAmount', key: 'totalAmount', render: v => v + ' лв', sorter: (a, b) => a.totalAmount - b.totalAmount },
+    { title: 'Сума', dataIndex: 'totalAmount', key: 'totalAmount', render: v => v + ' €', sorter: (a, b) => a.totalAmount - b.totalAmount },
     { title: 'Синхронизиран', dataIndex: 'isSynchronized', key: 'isSynchronized', render: v => v ? <Tag icon={<CheckCircleOutlined />} color="success">Да</Tag> : <Tag icon={<CloseCircleOutlined />} color="error">Не</Tag>, sorter: (a, b) => (a.isSynchronized === b.isSynchronized ? 0 : a.isSynchronized ? -1 : 1) },
     {
       title: 'Действия',
@@ -185,10 +185,10 @@ const ReportsArchivePage = () => {
               <h2>POS Система</h2>
               <p>Архивиран Z отчет</p>
               <p>Период: <b>{new Date(selectedReport.from).toLocaleString()} — {new Date(selectedReport.to).toLocaleString()}</b></p>
-              <p>Сума: <b>{selectedReport.totalAmount} лв</b></p>
+              <p>Сума: <b>{selectedReport.totalAmount} €</b></p>
               <p>Брой сметки: <b>{selectedReport.totalBills}</b></p>
-              <p>Плащане в брой: <b>{selectedReport.byPayment?.cash || 0} лв</b></p>
-              <p>Плащане с карта: <b>{selectedReport.byPayment?.card || 0} лв</b></p>
+              <p>Плащане в брой: <b>{selectedReport.byPayment?.cash || 0} €</b></p>
+              <p>Плащане с карта: <b>{selectedReport.byPayment?.card || 0} €</b></p>
               <p>Синхронизиран: {selectedReport.isSynchronized ? <Tag color="success">Да</Tag> : <Tag color="error">Не</Tag>}</p>
             </div>
             <h4>Разбивка по артикули</h4>
@@ -205,7 +205,7 @@ const ReportsArchivePage = () => {
                   <tr key={i}>
                     <td>{name}</td>
                     <td>{v.quantity}</td>
-                    <td>{v.total} лв</td>
+                    <td>{v.total} €</td>
                   </tr>
                 ))}
               </tbody>

@@ -8,7 +8,11 @@
     "server": "nodemon server.js",
     "client": "npm start --prefix client",
     "dev": "concurrently \"npm run server\" \"npm run client\" ",
-    "seed": "node seeder.js"
+    "seed": "node seeder.js",
+    "docker:up": "docker compose up -d --build",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f app",
+    "docker:seed": "docker compose run --rm app node seeder.js"
   },
   "author": "techinfoyt",
   "license": "MIT",
@@ -22,5 +26,8 @@
     "express": "^4.18.1",
     "mongoose": "^6.3.2",
     "morgan": "^1.10.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.14"
   }
 }

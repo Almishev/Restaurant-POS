@@ -154,8 +154,10 @@ const UsersPage = () => {
           )}
           <Form.Item name="role" label="Роля" rules={[{ required: true, message: 'Моля, изберете роля!' }]} initialValue="user">
             <Select>
-              <Option value="user">Потребител</Option>
+              <Option value="user">Потребител (сервитьор)</Option>
               <Option value="admin">Администратор</Option>
+              <Option value="bar">Бар</Option>
+              <Option value="kitchen">Кухня</Option>
             </Select>
           </Form.Item>
           <div className="d-flex justify-content-end">

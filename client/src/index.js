@@ -13,7 +13,23 @@ root.render(
   </Provider>
 );
 
-// If you want to start measuring performance in your app, pass a function
-// to log results (for example: reportWebVitals(console.log))
-// or send to an analytics endpoint. Learn more: https://bit.ly/CRA-vitals
+// PWA SW only in production. In CRA/webpack-dev it caches JS/CSS and causes
+// endless reload loops (address bar stuck on Stop/X).
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    if (process.env.NODE_ENV === "production") {
+      navigator.serviceWorker
+        .register(`${process.env.PUBLIC_URL || ""}/sw.js`)
+        .catch(() => undefined);
+    } else {
+      navigator.serviceWorker.getRegistrations().then((regs) => {
+        regs.forEach((reg) => reg.unregister());
+      });
+      if (window.caches?.keys) {
+        caches.keys().then((keys) => keys.forEach((k) => caches.delete(k)));
+      }
+    }
+  });
+}
+
 reportWebVitals();

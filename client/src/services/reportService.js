@@ -1,6 +1,7 @@
 import axios from 'axios';
 
-const API_URL = 'http://localhost:8081/api';
+// Relative URL so tablets/desktop hit the same host as the SPA (Docker / LAN)
+const API_URL = '/api';
 
 export const reportService = {
   async getReports() {

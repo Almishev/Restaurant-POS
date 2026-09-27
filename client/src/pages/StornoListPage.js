@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+﻿import React, { useState, useEffect } from "react";
 import DefaultLayout from "../components/DefaultLayout";
 import { useDispatch } from "react-redux";
 import { 
@@ -192,7 +192,7 @@ const StornoListPage = () => {
     {
       title: "Общо",
       dataIndex: "totalAmount",
-      render: (amount) => <span>{amount.toFixed(2)} лв.</span>
+      render: (amount) => <span>{amount.toFixed(2)} €</span>
     },
     {
       title: "Потребител",
@@ -268,7 +268,7 @@ const StornoListPage = () => {
                 title="Обща сума на сторно операциите" 
                 value={stornos.reduce((sum, storno) => sum + storno.totalAmount, 0)} 
                 precision={2}
-                suffix="лв."
+                suffix="€"
               />
             </Card>
           </Col>
@@ -278,7 +278,7 @@ const StornoListPage = () => {
                 title="Средна стойност" 
                 value={stornos.length ? (stornos.reduce((sum, storno) => sum + storno.totalAmount, 0) / stornos.length) : 0} 
                 precision={2}
-                suffix="лв."
+                suffix="€"
               />
             </Card>
           </Col>
@@ -344,7 +344,7 @@ const StornoListPage = () => {
                     <Descriptions.Item label="Бон ID">{originalBill._id.substring(18, 24)}</Descriptions.Item>
                     <Descriptions.Item label="Дата на създаване">{new Date(originalBill.createdAt || originalBill.date).toLocaleString()}</Descriptions.Item>
                     <Descriptions.Item label="Клиент">{originalBill.customerName || "Няма данни"}</Descriptions.Item>
-                    <Descriptions.Item label="Обща сума">{originalBill.totalAmount.toFixed(2)} лв.</Descriptions.Item>
+                    <Descriptions.Item label="Обща сума">{originalBill.totalAmount.toFixed(2)} €</Descriptions.Item>
                     <Descriptions.Item label="Начин на плащане">{originalBill.paymentMode === 'cash' ? 'В брой' : originalBill.paymentMode === 'card' ? 'Карта' : originalBill.paymentMode}</Descriptions.Item>
                   </Descriptions>
                 ) : (
@@ -371,11 +371,11 @@ const StornoListPage = () => {
                 {
                   title: "Цена за бр.",
                   dataIndex: "price",
-                  render: (price) => `${price.toFixed(2)} лв.`
+                  render: (price) => `${price.toFixed(2)} €`
                 },
                 {
                   title: "Общо",
-                  render: (_, record) => `${(record.quantity * record.price).toFixed(2)} лв.`
+                  render: (_, record) => `${(record.quantity * record.price).toFixed(2)} €`
                 }
               ]}
             />

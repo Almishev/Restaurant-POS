@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+﻿import React, { useState, useEffect } from "react";
 import DefaultLayout from "../components/DefaultLayout";
 import { useDispatch } from "react-redux";
 import { 
@@ -210,7 +210,7 @@ const StornoReportPage = () => {
     {
       title: "Сума",
       dataIndex: "amount",
-      render: (amount) => <span>{amount.toFixed(2)} лв.</span>
+      render: (amount) => <span>{amount.toFixed(2)} €</span>
     },
     {
       title: "Потребител",
@@ -285,7 +285,7 @@ const StornoReportPage = () => {
                   title="Обща сума на сторно операциите" 
                   value={reportData.totalAmount} 
                   precision={2}
-                  suffix="лв."
+                  suffix="€"
                 />
               </Card>
             </Col>
@@ -295,7 +295,7 @@ const StornoReportPage = () => {
                   title="Средна стойност" 
                   value={reportData.totalCount ? (reportData.totalAmount / reportData.totalCount) : 0} 
                   precision={2}
-                  suffix="лв."
+                  suffix="€"
                 />
               </Card>
             </Col>
@@ -319,7 +319,7 @@ const StornoReportPage = () => {
                       {getPieChartDataByReason().map(entry => (
                         <div key={entry.title} style={{ display: 'flex', alignItems: 'center', margin: '5px 0' }}>
                           <div style={{ width: '12px', height: '12px', backgroundColor: entry.color, marginRight: '5px' }}></div>
-                          <span>{entry.title}: {entry.value.toFixed(2)} лв.</span>
+                          <span>{entry.title}: {entry.value.toFixed(2)} €</span>
                         </div>
                       ))}
                     </div>
@@ -344,7 +344,7 @@ const StornoReportPage = () => {
                       {getPieChartDataByUser().map(entry => (
                         <div key={entry.title} style={{ display: 'flex', alignItems: 'center', margin: '5px 0' }}>
                           <div style={{ width: '12px', height: '12px', backgroundColor: entry.color, marginRight: '5px' }}></div>
-                          <span>{entry.title}: {entry.value.toFixed(2)} лв.</span>
+                          <span>{entry.title}: {entry.value.toFixed(2)} €</span>
                         </div>
                       ))}
                     </div>

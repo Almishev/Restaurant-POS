@@ -3,6 +3,18 @@ const mongoose = require("mongoose");
 const billSchema = mongoose.Schema(
   
   {
+    customerName: {
+      type: String,
+      required: false,
+    },
+    tableId: {
+      type: String,
+      required: false,
+    },
+    tableName: {
+      type: String,
+      required: false,
+    },
     totalAmount: {
       type: Number,
       required: true,

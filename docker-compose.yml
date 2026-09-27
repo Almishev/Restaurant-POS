@@ -1,0 +1,33 @@
+# Local / CI: builds the app image from this repo.
+# Restaurant install from Docker Hub: see deploy/docker-compose.yml
+#
+# Usage:
+#   docker compose up -d --build
+#   docker compose run --rm app node seeder.js
+
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    volumes:
+      - mongo_data:/data/db
+    # Uncomment to expose Mongo on the host (optional, for Compass/debug):
+    # ports:
+    #   - "27017:27017"
+
+  app:
+    build: .
+    image: ${DOCKER_IMAGE:-antonalmishev/restaurant-pos:latest}
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8081}:8081"
+    environment:
+      PORT: "8081"
+      HOST: "0.0.0.0"
+      MONGO_URI: mongodb://mongo:27017/restaurant-pos
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+    depends_on:
+      - mongo
+
+volumes:
+  mongo_data:

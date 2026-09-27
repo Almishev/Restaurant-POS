@@ -42,19 +42,65 @@ A comprehensive Point of Sale (POS) system for restaurants developed using the M
 
 ## Installation and Setup
 
+### Option A — Docker (recommended for restaurants)
+
+On the restaurant PC/server you only need [Docker](https://docs.docker.com/get-docker/) + Docker Compose.
+
+1. Create a folder and copy the deploy files from this repo (`deploy/docker-compose.yml` and `deploy/.env.example`):
+
+   ```bash
+   mkdir restaurant-pos && cd restaurant-pos
+   # copy deploy/docker-compose.yml here as docker-compose.yml
+   # copy deploy/.env.example here as .env and edit JWT_SECRET
+   ```
+
+2. Pull and start:
+
+   ```bash
+   docker compose pull
+   docker compose up -d
+   ```
+
+3. First install only — seed menu + default users:
+
+   ```bash
+   docker compose run --rm app node seeder.js
+   ```
+
+4. Open in browser / tablets: `http://SERVER-IP:8081`
+
+Default logins after seed:
+
+| User     | Password | Role    |
+|----------|----------|---------|
+| `admin`  | `0000`   | admin   |
+| `bar`    | `0000`   | bar     |
+| `kitchen`| `0000`   | kitchen |
+
+Update image later (after GitHub push publishes a new build):
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+**Docker Hub image:** `antonalmishev/restaurant-pos:latest`
+
+### Option B — Local development (hot reload)
+
 ### Prerequisites
 
-- Node.js (v14.x or higher)
+- Node.js (v18.x or higher)
 - MongoDB (local or Atlas connection)
-- npm or yarn package manager
+- npm package manager
 
 ### Installation Steps
 
 1. Clone the repository
 
    ```bash
-   git clone https://github.com/YOUR_USERNAME/restaurant-pos-system.git
-   cd restaurant-pos-system
+   git clone https://github.com/Almishev/Restaurant-POS.git
+   cd Restaurant-POS
    ```
 
 2. Install server dependencies
@@ -75,7 +121,8 @@ A comprehensive Point of Sale (POS) system for restaurants developed using the M
 
    ```
    PORT=8081
-   MONGO_URI=your_mongodb_connection_string
+   HOST=0.0.0.0
+   MONGO_URI=mongodb://127.0.0.1:27017/restaurant-pos
    JWT_SECRET=your_jwt_secret
    ```
 
@@ -87,9 +134,38 @@ A comprehensive Point of Sale (POS) system for restaurants developed using the M
 
 6. Start the development server
    ```bash
-   npm run dev
+   npm run server
    ```
-   This will start both the backend server and the React frontend.
+   In another terminal:
+   ```bash
+   npm run client
+   ```
+
+### Docker (from source / CI)
+
+```bash
+docker compose up -d --build
+docker compose run --rm app node seeder.js
+```
+
+### GitHub Actions → Docker Hub
+
+On every push to `main`/`master` (and on version tags `v*`), [`.github/workflows/docker-publish.yml`](./.github/workflows/docker-publish.yml) builds the image and pushes it to Docker Hub.
+
+Add these **repository secrets** in GitHub → Settings → Secrets and variables → Actions:
+
+| Secret               | Value                                      |
+|----------------------|--------------------------------------------|
+| `DOCKERHUB_USERNAME` | `antonalmishev` |
+| `DOCKERHUB_TOKEN`    | Docker Hub Access Token (Read & Write) |
+
+Create repository `restaurant-pos` on Docker Hub (Create repository), or let the first Actions push create it.
+
+Image tags published:
+
+- `latest` — from default branch
+- `sha-xxxxxx` — short commit SHA
+- `1.2.3` / `1.2` — when you push a git tag like `v1.2.3`
 
 ## Project Structure
 
@@ -120,10 +196,11 @@ restaurant-pos-system/
 
 ## Usage
 
-- Access the application at `http://localhost:3000`
-- Default admin login:
-  - Email: admin@example.com
-  - Password: admin123
+- Docker / production: `http://SERVER-IP:8081`
+- Local frontend (CRA): `http://localhost:3000` (API on `8081`)
+- Default admin after seed: `admin` / `0000`
+- Station users: `bar` / `0000`, `kitchen` / `0000`
+- `/register` is admin-only — create waiters from the Users page
 
 ## СУПТО Compliance
 
@@ -138,8 +215,10 @@ This POS system is compliant with Bulgarian СУПТО (Software for Managing Sa
 - `npm run start`: Start the production server
 - `npm run server`: Start the development server with nodemon
 - `npm run client`: Start the React development server
-- `npm run dev`: Run both server and client concurrently
-- `npm run seed`: Seed the database with initial data
+- `npm run seed`: Seed items + default users (`admin`, `bar`, `kitchen`)
+- `npm run docker:up`: Build and start Docker Compose stack
+- `npm run docker:down`: Stop Docker Compose stack
+- `npm run docker:seed`: Seed inside the running Compose app container
 
 ## Contact
 

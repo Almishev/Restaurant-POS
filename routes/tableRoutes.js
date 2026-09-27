@@ -219,4 +219,37 @@ router.put("/transfer-table", async (req, res) => {
   }
 });
 
+// PUT смяна на име на маса
+router.put("/rename-table", async (req, res) => {
+  try {
+    const { tableId, name } = req.body;
+    const trimmed = typeof name === "string" ? name.trim() : "";
+    if (!tableId || !trimmed) {
+      return res.status(400).json({ message: "Липсва tableId или ново име!" });
+    }
+
+    const duplicate = await Table.findOne({
+      name: trimmed,
+      _id: { $ne: tableId },
+    });
+    if (duplicate) {
+      return res.status(400).json({ message: "Вече съществува маса с това име!" });
+    }
+
+    const updated = await Table.findByIdAndUpdate(
+      tableId,
+      { name: trimmed },
+      { new: true }
+    );
+    if (!updated) {
+      return res.status(404).json({ message: "Масата не е намерена!" });
+    }
+
+    res.json({ message: "Името на масата е променено!", table: updated });
+  } catch (error) {
+    console.error("Грешка при преименуване на маса:", error);
+    res.status(500).json({ message: "Грешка при преименуване на масата!" });
+  }
+});
+
 module.exports = router;

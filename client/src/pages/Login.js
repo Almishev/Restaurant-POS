@@ -1,16 +1,19 @@
 import React, { useEffect } from "react";
-import { Form, Input, Button } from "antd";
-import { Link, useNavigate } from "react-router-dom";
-import { message } from "antd";
+import { Form, Input, Button, message } from "antd";
+import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useDispatch } from "react-redux";
-
-
-
+import { getHomePath } from "../utils/authRoles";
 
 const Login = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
+
+  const redirectByRole = (auth) => {
+    const role = auth?.role || "user";
+    navigate(getHomePath(role), { replace: true });
+  };
+
   const handleSubmit = async (value) => {
     try {
       dispatch({
@@ -21,7 +24,7 @@ const Login = () => {
       message.success("Успешно влизане");
       localStorage.setItem("auth", JSON.stringify(res.data));
       localStorage.removeItem("selectedTable");
-      navigate("/");
+      redirectByRole(res.data);
     } catch (error) {
       dispatch({ type: "HIDE_LOADING" });
       message.error("Възникна грешка");
@@ -29,42 +32,51 @@ const Login = () => {
     }
   };
 
-  //currently login  user
-  useEffect(() => {
-    if (localStorage.getItem("auth")) {
-      localStorage.getItem("auth");
-      navigate("/");
-    }
-  }, [navigate]);
-  return (
-    <>
-      <div className="register">
-        <div className="regsiter-form">
-          <h1>POS Система</h1>
-          <h3>Вход</h3>
-          <Form layout="vertical" onFinish={handleSubmit}>
-            <Form.Item name="userId" label="Потребителско име">
-              <Input />
-            </Form.Item>
-            <Form.Item name="password" label="Парола">
-              <Input type="password" />
-            </Form.Item>
+  const handleExit = () => {
+    localStorage.removeItem("auth");
+    localStorage.removeItem("selectedTable");
+    window.close();
+    setTimeout(() => {
+      message.info("Затвори приложението с Alt+F4 или от менюто на устройството.");
+    }, 300);
+  };
 
-            <div className="d-flex justify-content-between">
-              {/*
-              <p>
-              Нямате акаунт?
-                <Link to="/register"> Регистрирайте се тук! </Link>
-              </p>
-              */}
-              <Button type="primary" htmlType="submit">
-                Вход
-              </Button>
-            </div>
-          </Form>
-        </div>
+  useEffect(() => {
+    const raw = localStorage.getItem("auth");
+    if (raw) {
+      try {
+        redirectByRole(JSON.parse(raw));
+      } catch {
+        localStorage.removeItem("auth");
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navigate]);
+
+  return (
+    <div className="register">
+      <div className="regsiter-form">
+        <h1>POS Система</h1>
+        <h3>Вход</h3>
+        <Form layout="vertical" onFinish={handleSubmit}>
+          <Form.Item name="userId" label="Потребителско име">
+            <Input size="large" />
+          </Form.Item>
+          <Form.Item name="password" label="Парола">
+            <Input.Password size="large" />
+          </Form.Item>
+
+          <div className="login-actions">
+            <Button danger size="large" onClick={handleExit}>
+              Изход
+            </Button>
+            <Button type="primary" htmlType="submit" size="large">
+              Вход
+            </Button>
+          </div>
+        </Form>
       </div>
-    </>
+    </div>
   );
 };
 

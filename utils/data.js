@@ -2,32 +2,38 @@ const items = [
   {
     name: "Tea",
     price: 1,
-    category: "drinks"
+    category: "drinks",
+    department: "bar",
   },
   {
     name: "coffee",
     price: 2,
-    category: "drinks"
+    category: "drinks",
+    department: "bar",
   },
   {
     name: "Chicken Biryani",
     price: 10,
-    category: "rice"
+    category: "rice",
+    department: "kitchen",
   },
   {
     name: "Veg Biryani",
     price: 5,
-    category: "rice"
+    category: "rice",
+    department: "kitchen",
   },
   {
     name: "Chicken Hakka",
     price: 7,
-    category: "noodles"
+    category: "noodles",
+    department: "kitchen",
   },
   {
     name: "Eggy",
     price: 5,
-    category: "noodles"
+    category: "noodles",
+    department: "kitchen",
   },
 ];
 module.exports = items;

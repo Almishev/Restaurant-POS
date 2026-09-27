@@ -1,3 +1,4 @@
+const path = require("path");
 const express = require("express");
 const morgan = require("morgan");
 const bodyParser = require("body-parser");
@@ -33,10 +34,29 @@ app.use('/api/inventory', inventoryRoute);
 app.use('/api/recipes', recipeRoute);
 app.use('/api/stornos', require("./routes/stornoRoute"));
 
-//port
+// Liveness for Docker HEALTHCHECK / load balancers
+app.get("/api/health", (req, res) => {
+  res.status(200).json({ ok: true });
+});
+
+// Serve React build only when present (Docker/production). In local dev use CRA on :3000.
+const fs = require("fs");
+const clientBuildPath = path.join(__dirname, "client", "build");
+if (fs.existsSync(clientBuildPath)) {
+  app.use(express.static(clientBuildPath));
+  app.get("*", (req, res, next) => {
+    if (req.path.startsWith("/api")) return next();
+    res.sendFile(path.join(clientBuildPath, "index.html"), (err) => {
+      if (err) next();
+    });
+  });
+}
+
+//port — 0.0.0.0 so Docker / LAN tablets can reach the server
 const PORT = process.env.PORT || 8081;
+const HOST = process.env.HOST || "0.0.0.0";
 
 //listen
-app.listen(PORT, () => {
-  console.log(`Server Running On Port ${PORT}`.bgCyan.white);
+app.listen(PORT, HOST, () => {
+  console.log(`Server Running On http://${HOST}:${PORT}`.bgCyan.white);
 });

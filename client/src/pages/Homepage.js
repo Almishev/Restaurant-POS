@@ -1,12 +1,17 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import DefaultLayout from "./../components/DefaultLayout";
 import axios from "axios";
-import { Row, Col, message, Table, Button, Modal, Form, Input, Select, Drawer } from "antd";
+import { Row, Col, message, Button, Modal, Form, Input, InputNumber, Select, Dropdown, Menu } from "antd";
 import { useDispatch } from "react-redux";
 import { useNavigate, useParams } from "react-router-dom";
-import { CheckCircleTwoTone, SwapOutlined, MenuOutlined, DeleteOutlined, ShoppingCartOutlined, CloseOutlined, CheckOutlined } from '@ant-design/icons';
+import { CheckCircleTwoTone, CloseOutlined, CheckOutlined, ShoppingCartOutlined, AppstoreOutlined, DownOutlined, SearchOutlined } from '@ant-design/icons';
 import TransferItemsModal from "../components/TransferItemsModal";
 import TransferTableModal from "../components/TransferTableModal";
+import RenameTableModal from "../components/RenameTableModal";
+import OrderCartPanel from "../components/OrderCartPanel";
+import { formatPrice } from "../utils/formatPrice";
+import { useIsMobile } from "../hooks/useIsMobile";
+import "../styles/OrderPage.css";
 
 const Homepage = () => {
   const { tableId } = useParams();
@@ -21,13 +26,38 @@ const Homepage = () => {
   const [billPopup, setBillPopup] = useState(false);
   const [transferModalVisible, setTransferModalVisible] = useState(false);
   const [transferTableModalVisible, setTransferTableModalVisible] = useState(false);
+  const [renameTableModalVisible, setRenameTableModalVisible] = useState(false);
   const [form] = Form.useForm();
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const [drawerVisible, setDrawerVisible] = useState(false);
   const [isNoteModalVisible, setIsNoteModalVisible] = useState(false);
   const [noteValue, setNoteValue] = useState("");
+  const [addQuantity, setAddQuantity] = useState(1);
   const [itemToAdd, setItemToAdd] = useState(null);
+  const [cartTab, setCartTab] = useState("pending");
+  const [mobileView, setMobileView] = useState("menu"); // menu | cart
+  const [itemSearch, setItemSearch] = useState("");
+  const pendingOrderScrollRef = useRef(null);
+  const isMobile = useIsMobile(768);
+
+  const scrollToPendingItem = useCallback((itemId) => {
+    if (!itemId) return;
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        const container = pendingOrderScrollRef.current;
+        const root = container || document;
+        const row =
+          root.querySelector?.(`.ant-table-tbody > tr[data-row-key="${itemId}"]`) ||
+          root.querySelector?.(`[data-row-key="${itemId}"]`) ||
+          document.querySelector(`[data-row-key="${itemId}"]`);
+        if (row) {
+          row.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        } else if (container) {
+          container.scrollTop = container.scrollHeight;
+        }
+      }, 80);
+    });
+  }, []);
   // Зареждане на масата по tableId
   const fetchTable = useCallback(async () => {
     try {
@@ -78,44 +108,65 @@ const Homepage = () => {
   useEffect(() => {
     fetchCategories();
     fetchItems();
-  }, [fetchCategories, fetchItems]);// Зареждане на статусите от кухнята (готови артикули)
+  }, [fetchCategories, fetchItems]);
+
+  // Poll kitchen status + table cart so waiters see "Готово" without manual refresh.
+  // Skip setState when nothing changed to avoid pointless re-renders.
   useEffect(() => {
+    let cancelled = false;
+    const POLL_MS = 10000;
+
+    const sameItems = (a = [], b = []) => {
+      if (a === b) return true;
+      if (a.length !== b.length) return false;
+      return JSON.stringify(a) === JSON.stringify(b);
+    };
+
     const fetchKitchenOrders = async () => {
       try {
-        const res = await axios.get('/api/kitchen/orders');
-        setKitchenOrders(res.data);
+        const res = await axios.get("/api/kitchen/orders");
+        if (cancelled) return;
+        setKitchenOrders((prev) => (sameItems(prev, res.data) ? prev : res.data));
       } catch (error) {
         console.error("Грешка при зареждане на поръчките от кухнята:", error);
       }
     };
-    
-    // Функция за опресняване на данните за масата
+
     const refreshTableData = async () => {
-      if (tableId) {
-        try {
-          const res = await axios.get("/api/tables/get-tables");
-          const foundTable = res.data.find((t) => t._id === tableId);
-          if (foundTable) {
-            setTable(foundTable);
-            setPendingItems(foundTable.pendingItems || []);
-            setCartItems(foundTable.cartItems || []);
-            setTotalAmount(foundTable.totalAmount || 0);
-          }
-        } catch (error) {
-          console.error("Грешка при опресняване на данните за масата:", error);
-        }
+      if (!tableId) return;
+      try {
+        const res = await axios.get("/api/tables/get-tables");
+        if (cancelled) return;
+        const foundTable = res.data.find((t) => t._id === tableId);
+        if (!foundTable) return;
+        setTable((prev) =>
+          prev &&
+          sameItems(prev.pendingItems, foundTable.pendingItems) &&
+          sameItems(prev.cartItems, foundTable.cartItems) &&
+          prev.totalAmount === foundTable.totalAmount
+            ? prev
+            : foundTable
+        );
+        setPendingItems((prev) =>
+          sameItems(prev, foundTable.pendingItems || []) ? prev : foundTable.pendingItems || []
+        );
+        setCartItems((prev) =>
+          sameItems(prev, foundTable.cartItems || []) ? prev : foundTable.cartItems || []
+        );
+        setTotalAmount((prev) =>
+          prev === (foundTable.totalAmount || 0) ? prev : foundTable.totalAmount || 0
+        );
+      } catch (error) {
+        console.error("Грешка при опресняване на данните за масата:", error);
       }
     };
-    
-    // Извикваме веднага
+
     fetchKitchenOrders();
-    
-    // Задаваме интервал за автоматично опресняване
-    const kitchenInterval = setInterval(fetchKitchenOrders, 5000); 
-    const tableInterval = setInterval(refreshTableData, 5000);
-    
-    // Почистване при размонтиране на компонента
+    const kitchenInterval = setInterval(fetchKitchenOrders, POLL_MS);
+    const tableInterval = setInterval(refreshTableData, POLL_MS);
+
     return () => {
+      cancelled = true;
       clearInterval(kitchenInterval);
       clearInterval(tableInterval);
     };
@@ -126,22 +177,26 @@ const Homepage = () => {
     console.log('[DEBUG] Натиснат е бутона за добавяне на артикул:', item);
     setItemToAdd(item);
     setNoteValue("");
+    setAddQuantity(1);
     setIsNoteModalVisible(true);
   };
 
   const handleNoteModalOk = async () => {
-    console.log('[DEBUG] Потвърдено добавяне с бележка:', noteValue, itemToAdd);
+    console.log('[DEBUG] Потвърдено добавяне с бележка:', noteValue, itemToAdd, addQuantity);
     if (!itemToAdd) {
       console.error('[DEBUG] itemToAdd е null!');
       setIsNoteModalVisible(false);
       return;
     }
+    const qty = Math.max(1, Number(addQuantity) || 1);
     let updatedPending;
-    const item = { ...itemToAdd, quantity: 1, note: noteValue };
+    const item = { ...itemToAdd, quantity: qty, note: noteValue };
     const existing = pendingItems.find((i) => i._id === item._id);
     if (existing) {
       updatedPending = pendingItems.map((i) =>
-        i._id === item._id ? { ...i, quantity: i.quantity + 1, note: noteValue } : i
+        i._id === item._id
+          ? { ...i, quantity: i.quantity + qty, note: noteValue || i.note }
+          : i
       );
     } else {
       updatedPending = [...pendingItems, item];
@@ -150,13 +205,18 @@ const Homepage = () => {
     await updatePendingInDB(updatedPending);
     setIsNoteModalVisible(false);
     setNoteValue("");
+    setAddQuantity(1);
     setItemToAdd(null);
+    setCartTab("pending");
+    setMobileView("cart");
+    scrollToPendingItem(item._id);
   };
 
   const handleNoteModalCancel = () => {
     console.log('[DEBUG] Затваряне на модала за забележка');
     setIsNoteModalVisible(false);
     setNoteValue("");
+    setAddQuantity(1);
     setItemToAdd(null);
   };
 
@@ -228,6 +288,7 @@ const Homepage = () => {
       
       await updatePendingInDB([]); // изчисти pendingItems
       await fetchTable(); // обнови интерфейса
+      setCartTab("sent");
       message.success("Поръчката е изпратена към кухнята!");
     } catch (error) {
       message.error("Грешка при изпращане към кухнята!");
@@ -258,11 +319,12 @@ const Homepage = () => {
       const newObject = {
         ...value,
         customerName: table.name,
+        tableName: table.name,
+        tableId: tableId,
         cartItems: allItems,
         subTotal: total,
         totalAmount: Number(total),
-        tableId: tableId,
-        userId: userId, // добавяме userId
+        userId: userId,
       };
       console.log("[DEBUG] newObject за изпращане към /api/bills/add-bills:", newObject);
       await axios.post("/api/bills/add-bills", newObject);
@@ -305,259 +367,262 @@ const Homepage = () => {
     fetchTable();
   };
 
-  const cartColumns = [
-    { title: "Име", dataIndex: "name" },
-    { title: "Цена", dataIndex: "price" },
-    {
-      title: "Количество",
-      dataIndex: "quantity",
-      render: (quantity, record) => (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
-          <Button size="small" style={{ minWidth: 28, height: 28, padding: 0 }} onClick={() => handleChangeQuantity(record, 1)}>+</Button>
-          <b style={{ margin: "0 4px", minWidth: 18, textAlign: 'center', display: 'inline-block' }}>{quantity}</b>
-          <Button size="small" style={{ minWidth: 28, height: 28, padding: 0 }} onClick={() => handleChangeQuantity(record, -1)} disabled={quantity <= 1}>-</Button>
-        </div>
-      ),
-    },
-    {
-      title: "Забележка",
-      dataIndex: "note",
-      render: (note) => note ? <span style={{ color: '#ff4d4f' }}>{note}</span> : "-"
-    },
-    {
-      title: "Действие",
-      dataIndex: "_id",
-      render: (_, record) => (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%' }}>
-          <Button
-            danger
-            size="small"
-            icon={<DeleteOutlined style={{ fontSize: 20 }} />}
-            onClick={() => handleRemoveFromCart(record)}
-            style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, width: 32, height: 32 }}
-          />
-        </div>
-      ),
-    },
-  ];
-  // Колони за изпратени артикули (неактивни)
-  const sentColumns = [
-    { title: "Име", dataIndex: "name" },
-    { title: "Цена", dataIndex: "price" },
-    { title: "Количество", dataIndex: "quantity" },    { title: "Статус", render: (_, record) => {      // Извеждаме в конзолата информация за debugging
-      console.log(`[STATUS CHECK] Артикул: ${record.name}, Статус: ${record.status || 'няма'}`);
-
-      // Проверка за статус от record
+  // Статус за изпратени артикули
+  const getSentStatus = (record) => {
       if (record.status === "Готово") {
-        console.log(`[STATUS CHECK] Артикул ${record.name} има статус Готово директно в record`);
         return <span style={{ color: 'green' }}><CheckCircleTwoTone twoToneColor="#52c41a" /> Готово</span>;
       }
-      
-      // Специална проверка за салата Цезар
-      if (record.name === "Цезар") {
-        console.log(`[STATUS CHECK] Проверка на специален случай за Цезар: ${JSON.stringify(record)}`);
-      }
-      
-      // Проверка дали артикулът е маркиран като готов в active orders
       let isDone = false;
       for (const order of kitchenOrders) {
         if (order.tableName === table.name) {
           for (const item of order.items) {
             if (item.name === record.name && item.done === true) {
               isDone = true;
-              console.log(`[STATUS CHECK] Артикул ${record.name} е маркиран като готов в активна поръчка`);
               break;
             }
           }
           if (isDone) break;
         }
       }
-      
       return isDone ? 
         <span style={{ color: 'green' }}><CheckCircleTwoTone twoToneColor="#52c41a" /> Готово</span> : 
         <span style={{ color: '#888' }}>Изпратено</span>;
-    } },
-  ];
+  };
 
   // Изчисли общата сума за всички артикули (изпратени + текущи)
   const grandTotal = [...cartItems, ...pendingItems].reduce((sum, i) => sum + i.price * i.quantity, 0);
 
+  // Общ брой бройки (не само видове артикули)
+  const cartPiecesCount = [...cartItems, ...pendingItems].reduce(
+    (sum, i) => sum + (Number(i.quantity) || 0),
+    0
+  );
+
   // Проверка дали има артикули, които могат да бъдат прехвърлени
   const hasTransferableItems = cartItems.length > 0 || pendingItems.length > 0;
+
+  const searchQuery = itemSearch.trim().toLowerCase();
+  const filteredItems = itemsData.filter((item) => {
+    if (searchQuery) {
+      return (item.name || "").toLowerCase().includes(searchQuery);
+    }
+    return item.category === selectedCategory;
+  });
 
   const handleTableTransferSuccess = () => {
     localStorage.removeItem("selectedTable");
     navigate("/tables");
   };
 
+  const handleTableRenamed = (updatedTable) => {
+    if (!updatedTable) return;
+    setTable(updatedTable);
+    localStorage.setItem("selectedTable", JSON.stringify(updatedTable));
+  };
+
   return (
     <DefaultLayout>
-      <div style={{ marginBottom: 24, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <h2>Работиш на маса: <b>{table.name}</b></h2>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <Button 
-            type="default" 
-            icon={<SwapOutlined />} 
-            onClick={showTransferModal} 
-            disabled={!hasTransferableItems}
-            style={{ marginLeft: 16, background: '#003366', color: '#fff', border: 'none' }}
-          >
-            Прехвърли артикули
-          </Button>
-          <Button
-            type="default"
-            onClick={() => setTransferTableModalVisible(true)}
-            style={{ background: '#A3A7D2', color: '#003366', border: 'none' }}
-          >
-            Прехвърли маса
-          </Button>
+      <div className={`order-page ${isMobile ? "order-page-mobile" : "order-page-desktop"}`}>
+        <div className="order-page-toolbar">
+          <h2>
+            Работиш на маса: <b>{table.name}</b>
+          </h2>
+          <div className="toolbar-actions">
+            <Dropdown
+              trigger={["click"]}
+              overlay={
+                <Menu>
+                  <Menu.Item
+                    key="rename-table"
+                    onClick={() => setRenameTableModalVisible(true)}
+                  >
+                    Смяна на име
+                  </Menu.Item>
+                  <Menu.Item
+                    key="transfer-items"
+                    disabled={!hasTransferableItems}
+                    onClick={showTransferModal}
+                  >
+                    Прехвърли артикули
+                  </Menu.Item>
+                  <Menu.Item
+                    key="transfer-table"
+                    onClick={() => setTransferTableModalVisible(true)}
+                  >
+                    Прехвърли маса
+                  </Menu.Item>
+                </Menu>
+              }
+            >
+              <a
+                className="order-operations-link"
+                href="#operations"
+                onClick={(e) => e.preventDefault()}
+              >
+                Операции <DownOutlined style={{ fontSize: 10 }} />
+              </a>
+            </Dropdown>
+          </div>
         </div>
-      </div>
-      <Row gutter={24}>
-        {/* Категории в ляво */}
-        <Col xs={24} md={6} lg={5}>
-          {/* Мобилен изглед: hamburger бутон и Drawer */}
-          {window.innerWidth < 768 ? (
-            <>
-              <Button
-                icon={<MenuOutlined />}
-                onClick={() => setDrawerVisible(true)}
-                style={{ marginBottom: 16, background: '#003366', color: '#fff', border: 'none' }}
-              >
-                Категории
-              </Button>
-              <Drawer
-                title="Категории"
-                placement="left"
-                onClose={() => setDrawerVisible(false)}
-                visible={drawerVisible}
-                bodyStyle={{ padding: 0 }}
-              >
+
+        {isMobile && (
+          <div className="order-mobile-switch">
+            <Button
+              type={mobileView === "menu" ? "primary" : "default"}
+              icon={<AppstoreOutlined />}
+              onClick={() => setMobileView("menu")}
+            >
+              Меню
+            </Button>
+            <Button
+              type={mobileView === "cart" ? "primary" : "default"}
+              icon={<ShoppingCartOutlined />}
+              onClick={() => setMobileView("cart")}
+            >
+              Количка ({cartPiecesCount})
+            </Button>
+          </div>
+        )}
+
+        {(!isMobile || mobileView === "menu") && (
+          <Row
+            gutter={[16, 16]}
+            className="order-main-row"
+            style={isMobile ? undefined : { flex: 1, minHeight: 0, overflow: "hidden" }}
+          >
+            {!isMobile && (
+              <Col md={6} lg={5} className="order-col-scroll">
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
                   {categories.map((category) => (
                     <div
                       key={category._id}
                       className={`d-flex category ${selectedCategory === category.name && "category-active"}`}
-                      style={{ width: "100%", marginBottom: 16, background: "#003366", justifyContent: "flex-start", cursor: "pointer" }}
-                      onClick={() => {
-                        setSelectedCategory(category.name);
-                        setDrawerVisible(false);
+                      style={{
+                        width: "100%",
+                        marginBottom: 16,
+                        background: "#003366",
+                        justifyContent: "flex-start",
+                        cursor: "pointer",
                       }}
+                      onClick={() => setSelectedCategory(category.name)}
                     >
                       <h4 style={{ color: "white" }}>{category.name}</h4>
                     </div>
                   ))}
                 </div>
-              </Drawer>
-            </>
-          ) : (
-            // Десктоп изглед: страничен списък
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
-              {categories.map((category) => (
-                <div
-                  key={category._id}
-                  className={`d-flex category ${selectedCategory === category.name && "category-active"}`}
-                  style={{ width: "100%", marginBottom: 16, background: "#003366", justifyContent: "flex-start", cursor: "pointer" }}
-                  onClick={() => setSelectedCategory(category.name)}
-                >
-                  <h4 style={{ color: "white" }}>{category.name}</h4>
-                </div>
-              ))}
-            </div>
-          )}
-        </Col>
-        {/* Продукти в центъра */}
-        <Col xs={24} md={10} lg={11}>
-          <Row gutter={[16, 16]}>
-            {itemsData
-              .filter((i) => i.category === selectedCategory)
-              .map((item) => (
-                <Col xs={24} sm={12} md={24} lg={12} key={item._id}>
-                  <div style={{
-                    border: "1px solid #eee",
-                    borderRadius: 12,
-                    padding: 8,
-                    background: "#CED0E8",
-                    marginBottom: 8,
-                    boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
-                    minHeight: 40,
-                    display: 'flex',
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: 6
-                  }}>
-                    <span style={{ fontSize: 15, fontWeight: 600, color: '#003366', flex: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</span>
-                    <span style={{ fontSize: 14, color: '#333', flex: 1, textAlign: 'center', minWidth: 48 }}><b>{item.price} лв</b></span>
-                    <Button
-                      type="primary"
-                      onClick={() => handleAddToCartWithNote(item)}
-                      style={{
-                        background: '#003366',
-                        color: '#fff',
-                        fontWeight: 600,
-                        fontSize: 14,
-                        borderRadius: 6,
-                        height: 32,
-                        minWidth: 40,
-                        padding: '0 8px',
-                        flex: 1,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center'
-                      }}
-                      size="middle"
-                    >
-                      <ShoppingCartOutlined style={{ fontSize: 20 }} />
-                    </Button>
-                  </div>
-                </Col>
-              ))}
-          </Row>
-        </Col>
-        {/* Количка вдясно */}
-        <Col xs={24} md={8} lg={8}>
-          <div style={{ background: "#f8fafd", border: "1px solid #e3e3e3", borderRadius: 8, padding: 16, minHeight: 300 }}>
-            <h3>Количка за маса: <b>{table.name}</b></h3>
-            {/* Изпратени артикули */}
-            {cartItems.length > 0 && (
-              <div style={{ marginBottom: 16 }}>
-                <div style={{ fontWeight: 'bold', color: '#888', marginBottom: 4 }}>Изпратени към кухнята</div>
-                <Table
-                  columns={sentColumns}
-                  dataSource={cartItems}
-                  rowKey="_id"
-                  pagination={false}
-                  bordered
-                  size="small"
-                  style={{ background: '#f3f3f3' }}
-                />
-              </div>
+              </Col>
             )}
-            {/* Текуща поръчка */}
-            <div style={{ fontWeight: 'bold', marginBottom: 4 }}>Текуща поръчка</div>
-            <Table
-              columns={cartColumns}
-              dataSource={pendingItems}
-              rowKey="_id"
-              pagination={false}
-              bordered
-              size="small"
-            />
-            <div style={{ textAlign: "right", marginTop: 16 }}>
-              <h2>Общо: {grandTotal} лв</h2>
-            </div>
-            <div style={{ display: "flex", gap: 12, marginTop: 24, justifyContent: "flex-end" }}>
-              <Button type="default" style={{background:"#A3A7D2", borderRadius: "12px" }} onClick={handleSendToKitchen} disabled={pendingItems.length === 0}>
-                Маркирай поръчката
-              </Button>
-              <Button type="primary" style={{ borderRadius: "12px" }} onClick={handleGenerateBillClick} disabled={grandTotal === 0}>
-                Генерирай сметка
-              </Button>
-            </div>
-          </div>
-        </Col>
-      </Row>
+
+            <Col xs={24} md={isMobile ? 24 : 10} lg={isMobile ? 24 : 11} className="order-col-scroll">
+              <Input
+                allowClear
+                size="large"
+                className="order-item-search"
+                placeholder="Търси артикул..."
+                prefix={<SearchOutlined style={{ color: "#888" }} />}
+                value={itemSearch}
+                onChange={(e) => setItemSearch(e.target.value)}
+              />
+              {isMobile && !searchQuery && (
+                <div className="order-category-chips">
+                  {categories.map((category) => (
+                    <button
+                      key={category._id}
+                      type="button"
+                      className={`order-category-chip ${selectedCategory === category.name ? "active" : ""}`}
+                      onClick={() => setSelectedCategory(category.name)}
+                    >
+                      {category.name}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <Row gutter={[12, 12]}>
+                {filteredItems.length === 0 ? (
+                  <Col span={24}>
+                    <div className="order-item-search-empty">
+                      {searchQuery
+                        ? `Няма артикул „${itemSearch.trim()}“`
+                        : "Няма артикули в тази категория"}
+                    </div>
+                  </Col>
+                ) : (
+                  filteredItems.map((item) => (
+                    <Col xs={24} sm={12} md={24} lg={12} key={item._id}>
+                      <div
+                        role="button"
+                        tabIndex={0}
+                        className="order-product-card"
+                        onClick={() => handleAddToCartWithNote(item)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.preventDefault();
+                            handleAddToCartWithNote(item);
+                          }
+                        }}
+                      >
+                        <span
+                          style={{
+                            fontSize: 16,
+                            fontWeight: 600,
+                            color: "#003366",
+                            overflow: "hidden",
+                            textOverflow: "ellipsis",
+                            whiteSpace: "nowrap",
+                          }}
+                        >
+                          {item.name}
+                        </span>
+                        <span style={{ fontSize: 15, color: "#333", flexShrink: 0 }}>
+                          <b>{formatPrice(item.price)}</b>
+                        </span>
+                      </div>
+                    </Col>
+                  ))
+                )}
+              </Row>
+            </Col>
+
+            {!isMobile && (
+              <Col md={8} lg={8} style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+                <OrderCartPanel
+                  isMobile={false}
+                  tableName={table.name}
+                  pendingItems={pendingItems}
+                  cartItems={cartItems}
+                  cartTab={cartTab}
+                  setCartTab={setCartTab}
+                  grandTotal={grandTotal}
+                  onChangeQuantity={handleChangeQuantity}
+                  onRemove={handleRemoveFromCart}
+                  onSendToKitchen={handleSendToKitchen}
+                  onGenerateBill={handleGenerateBillClick}
+                  getSentStatus={getSentStatus}
+                  pendingScrollRef={pendingOrderScrollRef}
+                />
+              </Col>
+            )}
+          </Row>
+        )}
+
+        {isMobile && mobileView === "cart" && (
+          <OrderCartPanel
+            isMobile
+            tableName={table.name}
+            pendingItems={pendingItems}
+            cartItems={cartItems}
+            cartTab={cartTab}
+            setCartTab={setCartTab}
+            grandTotal={grandTotal}
+            onChangeQuantity={handleChangeQuantity}
+            onRemove={handleRemoveFromCart}
+            onSendToKitchen={handleSendToKitchen}
+            onGenerateBill={handleGenerateBillClick}
+            getSentStatus={getSentStatus}
+            pendingScrollRef={pendingOrderScrollRef}
+          />
+        )}
+      </div>
 
       {/* Модален прозорец за създаване на сметка */}
       <Modal
@@ -567,7 +632,7 @@ const Homepage = () => {
         footer={false}
       >
         <Form form={form} layout="vertical" onFinish={handleSubmitBill} initialValues={{ customerName: table.name, waiter: userData?.name }}>
-          <Form.Item name="customerName" label="Манса">
+          <Form.Item name="customerName" label="Маса">
             <Input disabled />
           </Form.Item>
           <Form.Item name="waiter" label="Сервитьор">
@@ -586,10 +651,10 @@ const Homepage = () => {
           </Form.Item>
           <div className="bill-it">
             <h5>
-              Сума : <b>{grandTotal}</b>
+              Сума : <b>{formatPrice(grandTotal)}</b>
             </h5>
             <h3>
-              Обща сума - <b>{grandTotal}</b>
+              Обща сума - <b>{formatPrice(grandTotal)}</b>
             </h3>
           </div>
           <div className="d-flex justify-content-end">
@@ -617,10 +682,17 @@ const Homepage = () => {
         onTransferSuccess={handleTableTransferSuccess}
       />
 
-      {/* Модален прозорец за забележка */}
-      {console.log('[DEBUG] Рендер на модала, isNoteModalVisible:', isNoteModalVisible)}
+      <RenameTableModal
+        visible={renameTableModalVisible}
+        onCancel={() => setRenameTableModalVisible(false)}
+        tableId={tableId}
+        currentName={table.name}
+        onRenamed={handleTableRenamed}
+      />
+
+      {/* Модален прозорец за забележка и количество */}
       <Modal
-        title="Добави забележка към артикула"
+        title={itemToAdd ? `Добави: ${itemToAdd.name}` : "Добави артикул"}
         visible={isNoteModalVisible}
         onOk={handleNoteModalOk}
         onCancel={handleNoteModalCancel}
@@ -643,6 +715,34 @@ const Homepage = () => {
         bodyStyle={{ padding: 16, paddingTop: 8 }}
         centered
       >
+        <div style={{ marginBottom: 16 }}>
+          <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 16 }}>Количество</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <Button
+              size="large"
+              onClick={() => setAddQuantity((q) => Math.max(1, (Number(q) || 1) - 1))}
+              style={{ minWidth: 48, height: 44, fontSize: 22, borderRadius: 8 }}
+            >
+              −
+            </Button>
+            <InputNumber
+              min={1}
+              max={99}
+              value={addQuantity}
+              onChange={(v) => setAddQuantity(Math.max(1, Number(v) || 1))}
+              style={{ width: 80, height: 44, fontSize: 20 }}
+            />
+            <Button
+              size="large"
+              type="primary"
+              onClick={() => setAddQuantity((q) => Math.min(99, (Number(q) || 1) + 1))}
+              style={{ minWidth: 48, height: 44, fontSize: 22, borderRadius: 8 }}
+            >
+              +
+            </Button>
+          </div>
+        </div>
+        <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 16 }}>Забележка</div>
         <Input.TextArea
           placeholder="Въведете забележка (по желание)"
           value={noteValue}

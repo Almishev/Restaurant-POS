@@ -10,6 +10,7 @@ import {
 } from "@ant-design/icons";
 import { Table, Button, Modal, message, Form, Input, Select } from "antd";
 import SelectedTableInfo from "../components/SelectedTableInfo";
+import { formatPrice } from "../utils/formatPrice";
 
 const CartPage = () => {
   const [subTotal, setSubTotal] = useState(0);
@@ -36,7 +37,7 @@ const CartPage = () => {
   };
   const columns = [
     { title: "Име", dataIndex: "name" },
-    { title: "Цена", dataIndex: "price" },
+    { title: "Цена", dataIndex: "price", render: (price) => formatPrice(price) },
     {
       title: "Количество",
       dataIndex: "_id",
@@ -152,7 +153,7 @@ const CartPage = () => {
         </Button>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <h3 style={{ margin: 0 }}>
-            Субтотал : <b>{subTotal}</b> лв
+            Субтотал : <b>{formatPrice(subTotal)}</b>
           </h3>
           <Button type="primary" onClick={() => setBillPopup(true)}>
             Генерирай сметка
@@ -174,11 +175,11 @@ const CartPage = () => {
           </Form.Item>
           <div className="bill-it">
             <h5>
-              Сума : <b>{subTotal}</b>
+              Сума : <b>{formatPrice(subTotal)}</b>
             </h5>
             <h3>
               Обща сума -{" "}
-              <b>{subTotal}</b>
+              <b>{formatPrice(subTotal)}</b>
             </h3>
           </div>
           <div className="d-flex justify-content-end">

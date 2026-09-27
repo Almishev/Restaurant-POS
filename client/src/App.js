@@ -1,5 +1,5 @@
 import "antd/dist/antd.min.css";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import CartPage from "./pages/CartPage";
 import Homepage from "./pages/Homepage";
 import ItemPage from "./pages/ItemPage";
@@ -18,11 +18,22 @@ import UsersPage from "./pages/UsersPage";
 import StornoListPage from "./pages/StornoListPage";
 import StornoReportPage from "./pages/StornoReportPage";
 import { useEffect } from "react";
-import { initCronJobs } from './utils/cron';
+import { initCronJobs } from "./utils/cron";
+import { getHomePath, canAccessPath } from "./utils/authRoles";
+
+function HomeRedirect() {
+  const auth = localStorage.getItem("auth");
+  if (!auth) return <Navigate to="/login" replace />;
+  try {
+    const { role } = JSON.parse(auth);
+    return <Navigate to={getHomePath(role)} replace />;
+  } catch {
+    return <Navigate to="/login" replace />;
+  }
+}
 
 function App() {
   useEffect(() => {
-    // Инициализация на cron jobs при стартиране на приложението
     initCronJobs();
   }, []);
 
@@ -30,7 +41,7 @@ function App() {
     <>
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Navigate to="/tables" />} />
+          <Route path="/" element={<HomeRedirect />} />
           <Route
             path="/order"
             element={
@@ -96,13 +107,13 @@ function App() {
             }
           />
           <Route path="/login" element={<Login />} />
-          <Route 
-            path="/register" 
+          <Route
+            path="/register"
             element={
               <AdminRoute>
                 <Register />
               </AdminRoute>
-            } 
+            }
           />
           <Route
             path="/bar"
@@ -176,24 +187,35 @@ function App() {
 
 export default App;
 
-export function ProtectedRoute({ children }) {
-  if (localStorage.getItem("auth")) {
-    return children;
-  } else {
-    return <Navigate to="/login" />;
+function readAuth() {
+  const raw = localStorage.getItem("auth");
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
   }
 }
 
-export function AdminRoute({ children }) {
-  const auth = localStorage.getItem("auth");
-  if (auth) {
-    const { role } = JSON.parse(auth);
-    if (role === "admin") {
-      return children;
-    } else {
-      return <Navigate to="/" />;
-    }
-  } else {
-    return <Navigate to="/login" />;
+export function ProtectedRoute({ children }) {
+  const location = useLocation();
+  const auth = readAuth();
+  if (!auth) {
+    return <Navigate to="/login" replace />;
   }
+  if (!canAccessPath(auth.role, location.pathname)) {
+    return <Navigate to={getHomePath(auth.role)} replace />;
+  }
+  return children;
+}
+
+export function AdminRoute({ children }) {
+  const auth = readAuth();
+  if (!auth) {
+    return <Navigate to="/login" replace />;
+  }
+  if (auth.role === "admin") {
+    return children;
+  }
+  return <Navigate to={getHomePath(auth.role)} replace />;
 }

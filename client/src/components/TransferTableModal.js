@@ -56,13 +56,16 @@ const TransferTableModal = ({ visible, onCancel, tableId, currentWaiterName, onT
       title={`Прехвърляне на маса към друг сервитьор`}
       visible={visible}
       onCancel={onCancel}
-      footer={[
-        <Button key="back" onClick={onCancel}>Отказ</Button>,
-        <Button key="submit" type="primary" loading={loading} onClick={handleTransfer} disabled={!selectedUserId}>
-          Прехвърли
-        </Button>,
-      ]}
-      width={400}
+      footer={
+        <div style={{ display: "flex", justifyContent: "space-between", width: "100%", gap: 12 }}>
+          <Button key="back" onClick={onCancel}>Отказ</Button>
+          <Button key="submit" type="primary" loading={loading} onClick={handleTransfer} disabled={!selectedUserId}>
+            Прехвърли
+          </Button>
+        </div>
+      }
+      width="95%"
+      style={{ maxWidth: 400 }}
     >
       <div style={{ marginBottom: 20 }}>
         <b>Текущ сервитьор:</b> {currentWaiterName || currentUserId}

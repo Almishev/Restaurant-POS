@@ -7,6 +7,7 @@ import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { Modal, Button, Table, message } from "antd";
 import "../styles/InvoiceStyles.css";
+import { formatPrice } from "../utils/formatPrice";
 const BillsPage = () => {
   const componentRef = useRef();
   const dispatch = useDispatch();
@@ -79,10 +80,30 @@ const BillsPage = () => {
 
   //able data
   const columns = [
-    { title: "ID ", dataIndex: "_id" },
-   
-    { title: "Субтотал", dataIndex: "subTotal" },
-    { title: "Обща сума", dataIndex: "totalAmount" },
+    {
+      title: "Маса",
+      key: "tableName",
+      render: (_, record) => record.tableName || record.customerName || "-",
+    },
+    {
+      title: "Дата",
+      key: "date",
+      render: (_, record) => {
+        const d = record.createdAt || record.date;
+        if (!d) return "-";
+        const date = new Date(d);
+        if (Number.isNaN(date.getTime())) return "-";
+        return date.toLocaleString("bg-BG", {
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+      },
+    },
+    { title: "Субтотал", dataIndex: "subTotal", render: (v) => formatPrice(v) },
+    { title: "Обща сума", dataIndex: "totalAmount", render: (v) => formatPrice(v) },
     {
       title: "Действие",
       dataIndex: "_id",
@@ -93,8 +114,6 @@ const BillsPage = () => {
         const currentDate = new Date();
         const timeDiff = Math.abs(currentDate - billDate) / 36e5; // hours
         const canStorno = timeDiff <= 24;
-        
-        console.log("Сметка:", record._id, "Дата:", billDate, "Разлика в часове:", timeDiff, "Може сторно:", canStorno);
         
         return (
           <div style={{ display: 'flex', gap: '8px' }}>
@@ -183,7 +202,7 @@ const BillsPage = () => {
             <div id="mid">
               <div className="mt-2">
                 <p>
-                  Маса : <b>{selectedBill.customerName || "-"}</b>
+                  Маса : <b>{selectedBill.tableName || selectedBill.customerName || "-"}</b>
                   <br />
                   Обслужващ сервитьор: <b>{servingUserName || selectedBill.userName || "-"}</b>
                   <br />
@@ -224,11 +243,11 @@ const BillsPage = () => {
                             <p className="itemtext">{item.quantity}</p>
                           </td>
                           <td className="tableitem">
-                            <p className="itemtext">{item.price}</p>
+                            <p className="itemtext">{formatPrice(item.price)}</p>
                           </td>
                           <td className="tableitem">
                             <p className="itemtext">
-                              {item.quantity * item.price}
+                              {formatPrice(item.quantity * item.price)}
                             </p>
                           </td>
                         </tr>
@@ -246,7 +265,7 @@ const BillsPage = () => {
                       </td>
                       <td className="payment">
                         <h2>
-                          <b>{selectedBill.totalAmount} лв</b>
+                          <b>{formatPrice(selectedBill.totalAmount)}</b>
                         </h2>
                         
                       </td>
@@ -257,9 +276,7 @@ const BillsPage = () => {
               {/*End Table*/}
               <div id="legalcopy">
                 <p className="legal">
-                  <strong>Благодарим ви за поръчката!</strong> Моля, отбележете, че това е сума, която не
-                  може да бъде върната. За контакт, моля, пишете на имейл
-                  <b> help@mydomain.com</b>
+                  <strong>Благодарим ви за поръчката!</strong>
                 </p>
               </div>
             </div>

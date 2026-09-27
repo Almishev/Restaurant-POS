@@ -3,7 +3,9 @@ import DefaultLayout from "../components/DefaultLayout";
 import { useDispatch } from "react-redux";
 import { DeleteOutlined, EditOutlined } from "@ant-design/icons";
 import axios from "axios";
-import { Modal, Button, Table, Form, Input, Select, message } from "antd";
+import { Modal, Button, Table, Form, Input, InputNumber, Select, message } from "antd";
+import { formatPrice, roundPrice } from "../utils/formatPrice";
+
 const ItemPage = () => {
   const dispatch = useDispatch();
   const [itemsData, setItemsData] = useState([]);
@@ -11,7 +13,6 @@ const ItemPage = () => {
   const [popupModal, setPopupModal] = useState(false);
   const [editItem, setEditItem] = useState(null);
 
-  // Fetch categories
   const fetchCategories = async () => {
     try {
       const res = await axios.get("/api/categories/get-categories");
@@ -35,14 +36,13 @@ const ItemPage = () => {
       console.log(error);
     }
   };
-  //useEffect
+
   useEffect(() => {
     getAllItems();
     fetchCategories();
     //eslint-disable-next-line
   }, []);
 
-  //handle deleet
   const handleDelete = async (record) => {
     try {
       dispatch({
@@ -60,11 +60,13 @@ const ItemPage = () => {
     }
   };
 
-  //able data
   const columns = [
     { title: "Име", dataIndex: "name" },
-    { title: "Цена", dataIndex: "price" },
-
+    {
+      title: "Цена",
+      dataIndex: "price",
+      render: (price) => formatPrice(price),
+    },
     {
       title: "Действие",
       dataIndex: "_id",
@@ -88,14 +90,14 @@ const ItemPage = () => {
     },
   ];
 
-  // handle form  submit
   const handleSubmit = async (value) => {
+    const payload = { ...value, price: roundPrice(value.price) };
     if (editItem === null) {
       try {
         dispatch({
           type: "SHOW_LOADING",
         });
-        const res = await axios.post("/api/items/add-item", value);
+        await axios.post("/api/items/add-item", payload);
         message.success("Артикулът е добавен успешно");
         getAllItems();
         setPopupModal(false);
@@ -111,7 +113,7 @@ const ItemPage = () => {
           type: "SHOW_LOADING",
         });
         await axios.put("/api/items/edit-item", {
-          ...value,
+          ...payload,
           itemId: editItem._id,
         });
         message.success("Артикулът е обновен успешно");
@@ -155,8 +157,17 @@ const ItemPage = () => {
             <Form.Item name="name" label="Име">
               <Input />
             </Form.Item>
-            <Form.Item name="price" label="Цена">
-              <Input />
+            <Form.Item
+              name="price"
+              label="Цена"
+              rules={[{ required: true, message: "Въведете цена!" }]}
+            >
+              <InputNumber
+                min={0}
+                step={0.01}
+                precision={2}
+                style={{ width: "100%" }}
+              />
             </Form.Item>
             <Form.Item name="category" label="Категория">
               <Select>
@@ -166,7 +177,6 @@ const ItemPage = () => {
                   </Select.Option>
                 ))}
               </Select>
-              
             </Form.Item>
             <Form.Item name="department" label="Отдел" rules={[{ required: true, message: "Избери отдел!" }]}>
               <Select>

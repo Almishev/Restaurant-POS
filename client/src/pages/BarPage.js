@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Table, Card, Tag, Spin, Empty, Button } from "antd";
+import { LogoutOutlined } from "@ant-design/icons";
+import { useNavigate } from "react-router-dom";
 import ReactToPrint from "react-to-print";
 
 // Компонент за бележката
@@ -18,6 +20,13 @@ const BarPage = () => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
   const printRefs = useRef({});
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    localStorage.removeItem("auth");
+    localStorage.removeItem("selectedTable");
+    navigate("/login", { replace: true });
+  };
 
   useEffect(() => {
     const fetchOrders = async () => {
@@ -143,6 +152,11 @@ const BarPage = () => {
 
   return (
     <div style={{ maxWidth: 900, margin: "0 auto", padding: 24 }}>
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+        <Button danger icon={<LogoutOutlined />} onClick={handleLogout} size="large">
+          Изход
+        </Button>
+      </div>
       <Card title="Поръчки към бара" bordered={false} style={{ boxShadow: "0 2px 8px #f0f1f2" }}>
         {loading ? (
           <div style={{ textAlign: "center", padding: 40 }}>

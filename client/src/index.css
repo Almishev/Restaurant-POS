@@ -41,23 +41,33 @@ body {
   background-color: rgba(128, 128, 128, 0.501);
 }
 
-/* ========= register page ================ */
+/* ========= register / login page ================ */
 
 .register {
   display: flex;
   align-items: center;
   flex-direction: column;
   justify-content: center;
-  height: 100vh;
+  min-height: 100vh;
+  padding: 24px;
+  background: #f4f8fb;
+  box-sizing: border-box;
 }
 
-.register input {
-  width: 400px !important;
+.register input,
+.register .ant-input,
+.register .ant-input-password {
+  width: 100% !important;
+  max-width: none !important;
 }
 
 .regsiter-form {
   background-color: rgba(98, 197, 251, 0.463);
-  padding: 20px;
+  padding: 28px 36px 32px;
+  width: 100%;
+  max-width: 480px;
+  box-sizing: border-box;
+  border-radius: 12px;
   box-shadow: rgba(50, 50, 93, 0.25) 0px 50px 100px -20px,
     rgba(0, 0, 0, 0.3) 0px 30px 60px -30px,
     rgba(10, 37, 64, 0.35) 0px -2px 6px 0px inset;
@@ -67,10 +77,43 @@ body {
   text-align: center;
   background-color: rgb(2, 2, 75);
   color: white;
-  padding: 10px;
+  padding: 12px;
+  margin: -28px -36px 20px;
+  border-radius: 12px 12px 0 0;
+  font-size: 1.75rem;
 }
 
 .regsiter-form h3 {
   color: rgb(4, 4, 113);
   text-align: center;
+  margin-bottom: 20px;
+}
+
+.login-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-top: 8px;
+}
+
+.login-actions .ant-btn {
+  min-width: 120px;
+  min-height: 44px;
+}
+
+@media (max-width: 480px) {
+  .regsiter-form {
+    max-width: 100%;
+    padding: 20px 16px 24px;
+  }
+
+  .regsiter-form h1 {
+    margin: -20px -16px 16px;
+    font-size: 1.4rem;
+  }
+
+  .login-actions .ant-btn {
+    flex: 1;
+  }
 }
