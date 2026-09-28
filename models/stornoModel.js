@@ -2,10 +2,28 @@ const mongoose = require("mongoose");
 
 const stornoSchema = mongoose.Schema(
   {
+    /** bill = след генерирана сметка; pre_bill = отмяна на изпратен артикул преди сметка */
+    type: {
+      type: String,
+      enum: ["bill", "pre_bill"],
+      default: "bill",
+    },
     originalBillId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "bills",
-      required: true,
+      required: false,
+    },
+    tableId: {
+      type: String,
+      default: "",
+    },
+    tableName: {
+      type: String,
+      default: "",
+    },
+    customerName: {
+      type: String,
+      default: "",
     },
     userId: {
       type: String,
@@ -26,6 +44,7 @@ const stornoSchema = mongoose.Schema(
     tax: {
       type: Number,
       required: true,
+      default: 0,
     },
     totalAmount: {
       type: Number,
@@ -33,12 +52,13 @@ const stornoSchema = mongoose.Schema(
     },
     paymentMode: {
       type: String,
-      required: true,
+      required: false,
+      default: "",
     },
     reason: {
       type: String,
       required: true,
-      enum: ["operatorError", "returnedItems", "defectiveGoods", "other"]
+      enum: ["operatorError", "returnedItems", "defectiveGoods", "other"],
     },
     reasonText: {
       type: String,
@@ -52,14 +72,14 @@ const stornoSchema = mongoose.Schema(
     fiscalStatus: {
       type: String,
       default: "pending",
-      enum: ["pending", "completed", "error"]
+      enum: ["pending", "completed", "error", "n/a"],
     },
     fiscalErrorMessage: {
       type: String,
     },
     originalBillFiscalId: {
       type: String,
-    }
+    },
   },
   { timestamps: true }
 );

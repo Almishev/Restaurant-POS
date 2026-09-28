@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from "react";
-import { Modal, Select, Button, Table, message, Checkbox } from "antd";
+import { Modal, Select, Button, Table, message, Checkbox, InputNumber } from "antd";
 import axios from "axios";
 import { formatPrice } from "../utils/formatPrice";
+import { mergeLineItems } from "../utils/mergeLineItems";
 
 const { Option } = Select;
+
+const itemKey = (item) => `${item._id}-${item.source}`;
 
 const TransferItemsModal = ({ visible, onCancel, currentTableId, currentTableName }) => {
   const [tables, setTables] = useState([]);
@@ -12,15 +15,15 @@ const TransferItemsModal = ({ visible, onCancel, currentTableId, currentTableNam
   const [selectedItems, setSelectedItems] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // Зареждане на всички маси
   useEffect(() => {
     const fetchTables = async () => {
       try {
         const userData = localStorage.getItem("auth") ? JSON.parse(localStorage.getItem("auth")) : null;
         const userId = userData?.userId;
         const res = await axios.get("/api/tables/get-tables");
-        // Филтрирай текущата маса и масите, които не са на този сервитьор
-        const otherTables = res.data.filter(table => table._id !== currentTableId && table.createdBy === userId);
+        const otherTables = res.data.filter(
+          (table) => table._id !== currentTableId && table.createdBy === userId
+        );
         setTables(otherTables);
       } catch (error) {
         message.error("Грешка при зареждане на масите!");
@@ -28,45 +31,66 @@ const TransferItemsModal = ({ visible, onCancel, currentTableId, currentTableNam
     };
 
     if (visible) {
+      setSelectedTableId(null);
+      setSelectedItems([]);
       fetchTables();
       fetchCurrentTableItems();
     }
   }, [visible, currentTableId]);
 
-  // Зареждане на артикули от текущата маса
   const fetchCurrentTableItems = async () => {
     try {
       const res = await axios.get("/api/tables/get-tables");
-      const currentTable = res.data.find(table => table._id === currentTableId);
+      const currentTable = res.data.find((table) => table._id === currentTableId);
       if (currentTable) {
-        // Комбинирай pendingItems и cartItems за по-лесно боравене
-        const allItems = [
-          ...(currentTable.pendingItems || []).map(item => ({ ...item, source: 'pending' })),
-          ...(currentTable.cartItems || []).map(item => ({ ...item, source: 'cart' }))
-        ];
-        setCartItems(allItems);
+        const pending = mergeLineItems(currentTable.pendingItems || []).map((item) => ({
+          ...item,
+          source: "pending",
+        }));
+        const cart = mergeLineItems(currentTable.cartItems || []).map((item) => ({
+          ...item,
+          source: "cart",
+        }));
+        setCartItems([...pending, ...cart]);
       }
     } catch (error) {
       message.error("Грешка при зареждане на артикулите!");
     }
   };
 
-  // Избор на артикул за прехвърляне
-  const handleItemSelect = (record) => {
-    const isSelected = selectedItems.some(item => 
-      item._id === record._id && item.source === record.source
-    );
-    
-    if (isSelected) {
-      setSelectedItems(selectedItems.filter(item => 
-        !(item._id === record._id && item.source === record.source)
-      ));
-    } else {
-      setSelectedItems([...selectedItems, record]);
+  const getSelected = (record) =>
+    selectedItems.find((item) => item._id === record._id && item.source === record.source);
+
+  const handleItemSelect = (record, checked) => {
+    if (!checked) {
+      setSelectedItems((prev) =>
+        prev.filter((item) => !(item._id === record._id && item.source === record.source))
+      );
+      return;
     }
+    // Default: transfer 1 portion (not the full line quantity)
+    setSelectedItems((prev) => [
+      ...prev.filter((item) => !(item._id === record._id && item.source === record.source)),
+      { ...record, transferQty: 1 },
+    ]);
   };
 
-  // Прехвърляне на избраните артикули
+  const handleTransferQtyChange = (record, value) => {
+    const maxQty = Number(record.quantity) || 1;
+    const qty = Math.min(maxQty, Math.max(1, Number(value) || 1));
+    setSelectedItems((prev) => {
+      const exists = prev.some((item) => item._id === record._id && item.source === record.source);
+      if (!exists) {
+        return [...prev, { ...record, transferQty: qty }];
+      }
+      return prev.map((item) =>
+        item._id === record._id && item.source === record.source
+          ? { ...item, transferQty: qty }
+          : item
+      );
+    });
+  };
+
   const handleTransfer = async () => {
     if (!selectedTableId) {
       message.error("Моля, изберете маса!");
@@ -80,16 +104,30 @@ const TransferItemsModal = ({ visible, onCancel, currentTableId, currentTableNam
 
     setLoading(true);
     try {
-      // Групирай избраните артикули по източник (pending/cart)
-      const pendingItems = selectedItems.filter(item => item.source === 'pending');
-      const cartItems = selectedItems.filter(item => item.source === 'cart');
+      // Send explicit transferQuantity so server never moves the full line by mistake
+      const withQty = selectedItems.map(({ source, transferQty, ...item }) => {
+        const available = Number(item.quantity) || 1;
+        const move = Math.min(available, Math.max(1, Number(transferQty) || 1));
+        return {
+          ...item,
+          source,
+          transferQuantity: move,
+          quantity: move,
+        };
+      });
 
-      // API заявка за прехвърляне на артикулите
+      const pendingPayload = withQty
+        .filter((item) => item.source === "pending")
+        .map(({ source, ...item }) => item);
+      const cartPayload = withQty
+        .filter((item) => item.source === "cart")
+        .map(({ source, ...item }) => item);
+
       await axios.post("/api/tables/transfer-items", {
         fromTableId: currentTableId,
         toTableId: selectedTableId,
-        pendingItems: pendingItems.map(({ source, ...item }) => item),
-        cartItems: cartItems.map(({ source, ...item }) => item)
+        pendingItems: pendingPayload,
+        cartItems: cartPayload,
       });
 
       message.success("Артикулите са прехвърлени успешно!");
@@ -102,30 +140,51 @@ const TransferItemsModal = ({ visible, onCancel, currentTableId, currentTableNam
     }
   };
 
-  // Колони за таблицата с артикули
   const columns = [
     {
       title: "Избери",
       key: "select",
+      width: 70,
       render: (_, record) => (
-        <Checkbox 
-          checked={selectedItems.some(item => 
-            item._id === record._id && item.source === record.source
-          )}
-          onChange={() => handleItemSelect(record)}
+        <Checkbox
+          checked={!!getSelected(record)}
+          onChange={(e) => handleItemSelect(record, e.target.checked)}
         />
       ),
     },
     { title: "Артикул", dataIndex: "name" },
     { title: "Цена", dataIndex: "price", render: (price) => formatPrice(price) },
-    { title: "Количество", dataIndex: "quantity" },
-    { 
-      title: "Статус", 
+    {
+      title: "На масата",
+      dataIndex: "quantity",
+      width: 90,
+    },
+    {
+      title: "Прехвърли бр.",
+      key: "transferQty",
+      width: 130,
       render: (_, record) => {
-        if (record.source === 'pending') return 'В количката';
-        if (record.status === 'Готово') return 'Готово';
-        return 'Изпратено';
-      }
+        const selected = getSelected(record);
+        const maxQty = Number(record.quantity) || 1;
+        return (
+          <InputNumber
+            min={1}
+            max={maxQty}
+            value={selected ? selected.transferQty : 1}
+            disabled={!selected}
+            onChange={(v) => handleTransferQtyChange(record, v)}
+            style={{ width: 90 }}
+          />
+        );
+      },
+    },
+    {
+      title: "Статус",
+      render: (_, record) => {
+        if (record.source === "pending") return "В количката";
+        if (record.status === "Готово") return "Готово";
+        return "Изпратено";
+      },
     },
   ];
 
@@ -151,15 +210,16 @@ const TransferItemsModal = ({ visible, onCancel, currentTableId, currentTableNam
         </div>
       }
       width="95%"
-      style={{ maxWidth: 800 }}
+      style={{ maxWidth: 900 }}
     >
       <div style={{ marginBottom: 20 }}>
         <Select
           placeholder="Изберете маса за прехвърляне"
           style={{ width: "100%", maxWidth: 400 }}
-          onChange={value => setSelectedTableId(value)}
+          value={selectedTableId}
+          onChange={(value) => setSelectedTableId(value)}
         >
-          {tables.map(table => (
+          {tables.map((table) => (
             <Option key={table._id} value={table._id}>
               {table.name}
             </Option>
@@ -170,7 +230,7 @@ const TransferItemsModal = ({ visible, onCancel, currentTableId, currentTableNam
       <Table
         columns={columns}
         dataSource={cartItems}
-        rowKey={record => `${record._id}-${record.source}`}
+        rowKey={itemKey}
         pagination={false}
         size="small"
       />

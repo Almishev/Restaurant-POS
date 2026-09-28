@@ -10,34 +10,30 @@ const {
   checkZReportController,
   syncZReportController,
   getBillByIdController,
+  getDashboardController,
+  getInventoryReportController,
+  getFiscalStatusController,
 } = require("./../controllers/billsController");
+const { requireAuth, requireAdmin } = require("../middleware/authMiddleware");
 
 const router = express.Router();
 
-//routes
+router.get("/fiscal-status", requireAdmin, getFiscalStatusController);
+router.post("/add-bills", requireAuth, addBillsController);
+router.get("/get-bills", requireAuth, getBillsController);
+router.get("/get-bill/:id", requireAuth, getBillByIdController);
 
-//MEthod - POST
-router.post("/add-bills", addBillsController);
+router.get("/get-report", requireAuth, getReportController);
+router.post("/create-z-report", requireAdmin, createZReportController);
 
-//MEthod - GET
-router.get("/get-bills", getBillsController);
+router.get("/z-reports", requireAdmin, getZReportsController);
+router.get("/z-reports/:id", requireAdmin, getZReportByIdController);
 
-// Вземане на конкретен бон по ID
-router.get("/get-bill/:id", getBillByIdController);
+router.get("/unsynchronized-reports", requireAdmin, getUnsynchronizedReportsController);
+router.get("/check-z-report", requireAdmin, checkZReportController);
+router.post("/sync-z-report/:reportId", requireAdmin, syncZReportController);
 
-// X/Z отчет
-router.get("/get-report", getReportController);
-
-// Създаване на Z отчет
-router.post("/create-z-report", createZReportController);
-
-router.get("/z-reports", getZReportsController);
-router.get("/z-reports/:id", getZReportByIdController);
-
-router.get("/unsynchronized-reports", getUnsynchronizedReportsController);
-router.get("/check-z-report", checkZReportController);
-
-// Синхронизация на Z отчет
-router.post("/sync-z-report/:reportId", syncZReportController);
+router.get("/dashboard", requireAdmin, getDashboardController);
+router.get("/inventory-report", requireAdmin, getInventoryReportController);
 
 module.exports = router;

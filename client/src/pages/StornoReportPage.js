@@ -193,14 +193,30 @@ const StornoReportPage = () => {
       render: (id) => <span>{id.toString().substring(18, 24)}</span>
     },
     {
+      title: "Тип",
+      dataIndex: "type",
+      render: (t) => (t === "pre_bill" ? "Преди сметка" : "Сметка"),
+    },
+    {
       title: "Дата",
       dataIndex: "date",
       render: (date) => <span>{new Date(date).toLocaleString()}</span>
     },
     {
+      title: "Маса",
+      dataIndex: "tableName",
+      render: (n) => n || "—",
+    },
+    {
+      title: "Артикули",
+      dataIndex: "items",
+      render: (items) => items || "—",
+    },
+    {
       title: "Оригинален бон",
       dataIndex: "originalBillId",
-      render: (id) => <span>{id.toString().substring(18, 24)}</span>
+      render: (id) =>
+        id ? <span>{id.toString().substring(18, 24)}</span> : "—",
     },
     {
       title: "Причина",
@@ -213,9 +229,10 @@ const StornoReportPage = () => {
       render: (amount) => <span>{amount.toFixed(2)} €</span>
     },
     {
-      title: "Потребител",
+      title: "Сервитьор",
       dataIndex: "userName"
-    },    {
+    },
+    {
       title: "Действия",
       render: (_, record) => (
         <Button 
@@ -232,7 +249,7 @@ const StornoReportPage = () => {
     <DefaultLayout>
       <div className="d-flex justify-content-between mb-3">
         <Title level={3}>Отчет за сторно операции</Title>
-        <Button type="primary" onClick={() => navigate("/storno")}>
+        <Button type="primary" onClick={() => navigate("/bills")}>
           Ново сторно
         </Button>
       </div>
@@ -364,6 +381,32 @@ const StornoReportPage = () => {
               pagination={{ pageSize: 10 }}
             />
           </Card>
+
+          {reportData.byDate && Object.keys(reportData.byDate).length > 0 && (
+            <Card title="По дата" className="mt-3">
+              <Table
+                size="small"
+                pagination={false}
+                dataSource={Object.entries(reportData.byDate)
+                  .sort(([a], [b]) => a.localeCompare(b))
+                  .map(([date, v]) => ({
+                    key: date,
+                    date,
+                    count: v.count,
+                    amount: v.amount,
+                  }))}
+                columns={[
+                  { title: "Дата", dataIndex: "date" },
+                  { title: "Брой", dataIndex: "count" },
+                  {
+                    title: "Сума",
+                    dataIndex: "amount",
+                    render: (v) => `${Number(v).toFixed(2)} €`,
+                  },
+                ]}
+              />
+            </Card>
+          )}
         </>
       ) : (
         <Card>

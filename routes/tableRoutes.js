@@ -2,6 +2,145 @@ const express = require("express");
 const router = express.Router();
 const Table = require("../models/tableModel");
 
+function toPlainItem(item) {
+  if (!item) return null;
+  if (typeof item.toObject === "function") return item.toObject();
+  return { ...item };
+}
+
+/** Merge same product _id into one line (sum quantities). */
+function mergeLineItems(items = []) {
+  const map = new Map();
+  for (const raw of items) {
+    const item = toPlainItem(raw);
+    if (!item) continue;
+    const id = String(item._id ?? item.itemId ?? "");
+    if (!id) continue;
+    const qty = Number(item.quantity) || 0;
+    const existing = map.get(id);
+    if (!existing) {
+      map.set(id, { ...item, _id: item._id ?? item.itemId, quantity: qty });
+      continue;
+    }
+    const statuses = [existing.status, item.status].filter(Boolean);
+    let status = existing.status || item.status;
+    if (statuses.length) {
+      status = statuses.every((s) => s === "Готово") ? "Готово" : "Изпратено";
+    }
+    const notes = [existing.note, item.note]
+      .map((n) => (n || "").trim())
+      .filter(Boolean);
+    map.set(id, {
+      ...existing,
+      ...item,
+      _id: existing._id,
+      quantity: (Number(existing.quantity) || 0) + qty,
+      status,
+      note: [...new Set(notes)].join("; "),
+    });
+  }
+  return Array.from(map.values());
+}
+
+function lineId(item) {
+  return String(item._id ?? item.itemId ?? "");
+}
+
+/**
+ * Move qty from source list to target list (partial transfer supported).
+ * Prefers transferQuantity; falls back to quantity (legacy).
+ */
+function transferPartial(sourceList, targetList, transferItems) {
+  let source = mergeLineItems(sourceList);
+  let target = mergeLineItems(targetList);
+
+  for (const t of transferItems || []) {
+    const id = lineId(t);
+    // Prefer explicit transferQuantity so we never accidentally move the full line stock
+    const moveQty = Math.max(
+      0,
+      Number(
+        t.transferQuantity != null ? t.transferQuantity : t.quantity
+      ) || 0
+    );
+    if (!id || moveQty <= 0) continue;
+
+    const srcIdx = source.findIndex((i) => lineId(i) === id);
+    if (srcIdx < 0) {
+      // Fallback: match by name if _id differs (legacy rows)
+      const byName = source.findIndex(
+        (i) =>
+          (i.name || "").trim().toLowerCase() === (t.name || "").trim().toLowerCase()
+      );
+      if (byName < 0) continue;
+      // use byName path below via reassignment
+      const srcItem = source[byName];
+      const available = Number(srcItem.quantity) || 0;
+      const qty = Math.min(moveQty, available);
+      if (qty <= 0) continue;
+
+      if (qty >= available) {
+        source.splice(byName, 1);
+      } else {
+        source[byName] = { ...toPlainItem(srcItem), quantity: available - qty };
+      }
+
+      const tgtIdx = target.findIndex(
+        (i) =>
+          lineId(i) === lineId(srcItem) ||
+          (i.name || "").trim().toLowerCase() === (srcItem.name || "").trim().toLowerCase()
+      );
+      if (tgtIdx >= 0) {
+        const tgt = target[tgtIdx];
+        target[tgtIdx] = {
+          ...toPlainItem(tgt),
+          quantity: (Number(tgt.quantity) || 0) + qty,
+        };
+      } else {
+        target.push({
+          ...toPlainItem(srcItem),
+          quantity: qty,
+        });
+      }
+      continue;
+    }
+
+    const srcItem = source[srcIdx];
+    const available = Number(srcItem.quantity) || 0;
+    const qty = Math.min(moveQty, available);
+    if (qty <= 0) continue;
+
+    if (qty >= available) {
+      source.splice(srcIdx, 1);
+    } else {
+      source[srcIdx] = { ...toPlainItem(srcItem), quantity: available - qty };
+    }
+
+    const tgtIdx = target.findIndex((i) => lineId(i) === id);
+    if (tgtIdx >= 0) {
+      const tgt = target[tgtIdx];
+      target[tgtIdx] = {
+        ...toPlainItem(tgt),
+        quantity: (Number(tgt.quantity) || 0) + qty,
+        status: tgt.status || srcItem.status || t.status,
+        note: tgt.note || srcItem.note || t.note || "",
+      };
+    } else {
+      target.push({
+        ...toPlainItem(srcItem),
+        quantity: qty,
+        status: t.status || srcItem.status,
+        note: t.note || srcItem.note || "",
+      });
+    }
+  }
+
+  return {
+    source: mergeLineItems(source),
+    target: mergeLineItems(target),
+  };
+}
+
 // GET всички маси
 router.get("/get-tables", async (req, res) => {
   try {
@@ -29,8 +168,8 @@ router.put("/update-table-cart", async (req, res) => {
   try {
     const { tableId, cartItems, totalAmount } = req.body;
     
-    // Ensure each item has a status field
-    const itemsWithStatus = cartItems.map(item => {
+    // Ensure each item has a status field, merge duplicate product lines
+    const itemsWithStatus = mergeLineItems(cartItems || []).map(item => {
       if (!item.status) {
         return { ...item, status: "Изпратено" };
       }
@@ -55,7 +194,7 @@ router.put("/update-table-pending-items", async (req, res) => {
     const { tableId, pendingItems, totalAmount } = req.body;
     const updated = await Table.findByIdAndUpdate(
       tableId,
-      { pendingItems, totalAmount },
+      { pendingItems: mergeLineItems(pendingItems || []), totalAmount },
       { new: true }
     );
     res.status(200).json(updated);
@@ -119,17 +258,15 @@ router.put("/update-item-status", async (req, res) => {
   }
 });
 
-// POST прехвърляне на артикули между маси
+// POST прехвърляне на артикули между маси (поддържа частично количество)
 router.post("/transfer-items", async (req, res) => {
   try {
     const { fromTableId, toTableId, pendingItems, cartItems } = req.body;
     
-    // Проверка за задължителни полета
     if (!fromTableId || !toTableId) {
       return res.status(400).json({ message: "Моля, предоставете идентификатори на двете маси!" });
     }
 
-    // Намираме изходната и целевата маси
     const sourceTable = await Table.findById(fromTableId);
     const targetTable = await Table.findById(toTableId);
 
@@ -137,58 +274,51 @@ router.post("/transfer-items", async (req, res) => {
       return res.status(404).json({ message: "Една или двете маси не са намерени!" });
     }
 
-    // Операции с масите
-    let sourceModified = false;
-    let targetTableUpdates = {};
-
-    // Обработка на pending артикули
     if (pendingItems && pendingItems.length > 0) {
-      // Добавяме към целевата маса
-      targetTable.pendingItems = [...(targetTable.pendingItems || []), ...pendingItems];
-      
-      // Премахваме от изходната маса
-      if (sourceTable.pendingItems && sourceTable.pendingItems.length > 0) {
-        const pendingItemIds = pendingItems.map(item => item._id);
-        sourceTable.pendingItems = sourceTable.pendingItems.filter(
-          item => !pendingItemIds.includes(item._id.toString())
-        );
-        sourceModified = true;
-      }
+      const result = transferPartial(
+        sourceTable.pendingItems || [],
+        targetTable.pendingItems || [],
+        pendingItems
+      );
+      sourceTable.pendingItems = result.source;
+      targetTable.pendingItems = result.target;
+      sourceTable.markModified("pendingItems");
+      targetTable.markModified("pendingItems");
     }
 
-    // Обработка на cart артикули
     if (cartItems && cartItems.length > 0) {
-      // Добавяме към целевата маса
-      targetTable.cartItems = [...(targetTable.cartItems || []), ...cartItems];
-      
-      // Премахваме от изходната маса
-      if (sourceTable.cartItems && sourceTable.cartItems.length > 0) {
-        const cartItemIds = cartItems.map(item => item._id);
-        sourceTable.cartItems = sourceTable.cartItems.filter(
-          item => !cartItemIds.includes(item._id.toString())
-        );
-        sourceModified = true;
-      }
+      const result = transferPartial(
+        sourceTable.cartItems || [],
+        targetTable.cartItems || [],
+        cartItems
+      );
+      sourceTable.cartItems = result.source;
+      targetTable.cartItems = result.target;
+      sourceTable.markModified("cartItems");
+      targetTable.markModified("cartItems");
     }
 
-    // Преизчисляваме сумите за двете маси
-    // За целевата маса
+    // Collapse any leftover duplicates
+    sourceTable.pendingItems = mergeLineItems(sourceTable.pendingItems || []);
+    sourceTable.cartItems = mergeLineItems(sourceTable.cartItems || []);
+    targetTable.pendingItems = mergeLineItems(targetTable.pendingItems || []);
+    targetTable.cartItems = mergeLineItems(targetTable.cartItems || []);
+    sourceTable.markModified("pendingItems");
+    sourceTable.markModified("cartItems");
+    targetTable.markModified("pendingItems");
+    targetTable.markModified("cartItems");
+
     targetTable.totalAmount = [
       ...(targetTable.cartItems || []),
       ...(targetTable.pendingItems || [])
     ].reduce((sum, item) => sum + (item.price * item.quantity), 0);
 
-    // За изходната маса, ако е променена
-    if (sourceModified) {
-      sourceTable.totalAmount = [
-        ...(sourceTable.cartItems || []),
-        ...(sourceTable.pendingItems || [])
-      ].reduce((sum, item) => sum + (item.price * item.quantity), 0);
+    sourceTable.totalAmount = [
+      ...(sourceTable.cartItems || []),
+      ...(sourceTable.pendingItems || [])
+    ].reduce((sum, item) => sum + (item.price * item.quantity), 0);
       
-      await sourceTable.save();
-    }
-
-    // Запазваме промените в целевата маса
+    await sourceTable.save();
     await targetTable.save();
 
     res.status(200).json({ 

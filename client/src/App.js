@@ -17,6 +17,8 @@ import ReportsArchivePage from "./pages/ReportsArchivePage";
 import UsersPage from "./pages/UsersPage";
 import StornoListPage from "./pages/StornoListPage";
 import StornoReportPage from "./pages/StornoReportPage";
+import DashboardPage from "./pages/DashboardPage";
+import InventoryReportPage from "./pages/InventoryReportPage";
 import { useEffect } from "react";
 import { initCronJobs } from "./utils/cron";
 import { getHomePath, canAccessPath } from "./utils/authRoles";
@@ -42,143 +44,26 @@ function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<HomeRedirect />} />
-          <Route
-            path="/order"
-            element={
-              <ProtectedRoute>
-                <Homepage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/categories"
-            element={
-              <ProtectedRoute>
-                <CategoriesPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/items"
-            element={
-              <ProtectedRoute>
-                <ItemPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/cart"
-            element={
-              <ProtectedRoute>
-                <CartPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/bills"
-            element={
-              <ProtectedRoute>
-                <BillsPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/tables"
-            element={
-              <ProtectedRoute>
-                <TablesPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/kitchen"
-            element={
-              <ProtectedRoute>
-                <KitchenPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/order/:tableId"
-            element={
-              <ProtectedRoute>
-                <Homepage />
-              </ProtectedRoute>
-            }
-          />
+          <Route path="/order" element={<ProtectedRoute><Homepage /></ProtectedRoute>} />
+          <Route path="/categories" element={<ProtectedRoute><CategoriesPage /></ProtectedRoute>} />
+          <Route path="/items" element={<ProtectedRoute><ItemPage /></ProtectedRoute>} />
+          <Route path="/cart" element={<ProtectedRoute><CartPage /></ProtectedRoute>} />
+          <Route path="/bills" element={<ProtectedRoute><BillsPage /></ProtectedRoute>} />
+          <Route path="/tables" element={<ProtectedRoute><TablesPage /></ProtectedRoute>} />
+          <Route path="/kitchen" element={<ProtectedRoute><KitchenPage /></ProtectedRoute>} />
+          <Route path="/order/:tableId" element={<ProtectedRoute><Homepage /></ProtectedRoute>} />
           <Route path="/login" element={<Login />} />
-          <Route
-            path="/register"
-            element={
-              <AdminRoute>
-                <Register />
-              </AdminRoute>
-            }
-          />
-          <Route
-            path="/bar"
-            element={
-              <ProtectedRoute>
-                <BarPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/reports"
-            element={
-              <ProtectedRoute>
-                <ReportsPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/reports-archive"
-            element={
-              <ProtectedRoute>
-                <ReportsArchivePage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/inventory"
-            element={
-              <ProtectedRoute>
-                <InventoryPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/recipe"
-            element={
-              <ProtectedRoute>
-                <RecipePage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/users"
-            element={
-              <AdminRoute>
-                <UsersPage />
-              </AdminRoute>
-            }
-          />
-          <Route
-            path="/storno-list"
-            element={
-              <ProtectedRoute>
-                <StornoListPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/storno-report"
-            element={
-              <ProtectedRoute>
-                <StornoReportPage />
-              </ProtectedRoute>
-            }
-          />
+          <Route path="/register" element={<AdminRoute><Register /></AdminRoute>} />
+          <Route path="/bar" element={<ProtectedRoute><BarPage /></ProtectedRoute>} />
+          <Route path="/reports" element={<ProtectedRoute><ReportsPage /></ProtectedRoute>} />
+          <Route path="/reports-archive" element={<AdminRoute><ReportsArchivePage /></AdminRoute>} />
+          <Route path="/dashboard" element={<AdminRoute><DashboardPage /></AdminRoute>} />
+          <Route path="/inventory-report" element={<AdminRoute><InventoryReportPage /></AdminRoute>} />
+          <Route path="/inventory" element={<AdminRoute><InventoryPage /></AdminRoute>} />
+          <Route path="/recipe" element={<AdminRoute><RecipePage /></AdminRoute>} />
+          <Route path="/users" element={<AdminRoute><UsersPage /></AdminRoute>} />
+          <Route path="/storno-list" element={<AdminRoute><StornoListPage /></AdminRoute>} />
+          <Route path="/storno-report" element={<AdminRoute><StornoReportPage /></AdminRoute>} />
         </Routes>
       </BrowserRouter>
     </>

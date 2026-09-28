@@ -4,12 +4,13 @@ import axios from "axios";
 import { Row, Col, message, Button, Modal, Form, Input, InputNumber, Select, Dropdown, Menu } from "antd";
 import { useDispatch } from "react-redux";
 import { useNavigate, useParams } from "react-router-dom";
-import { CheckCircleTwoTone, CloseOutlined, CheckOutlined, ShoppingCartOutlined, AppstoreOutlined, DownOutlined, SearchOutlined } from '@ant-design/icons';
+import { CheckCircleTwoTone, CloseOutlined, CheckOutlined, ShoppingCartOutlined, AppstoreOutlined, DownOutlined, SearchOutlined, PlusOutlined, MinusOutlined } from '@ant-design/icons';
 import TransferItemsModal from "../components/TransferItemsModal";
 import TransferTableModal from "../components/TransferTableModal";
 import RenameTableModal from "../components/RenameTableModal";
 import OrderCartPanel from "../components/OrderCartPanel";
 import { formatPrice } from "../utils/formatPrice";
+import { mergeLineItems } from "../utils/mergeLineItems";
 import { useIsMobile } from "../hooks/useIsMobile";
 import "../styles/OrderPage.css";
 
@@ -27,6 +28,10 @@ const Homepage = () => {
   const [transferModalVisible, setTransferModalVisible] = useState(false);
   const [transferTableModalVisible, setTransferTableModalVisible] = useState(false);
   const [renameTableModalVisible, setRenameTableModalVisible] = useState(false);
+  const [sentStornoItem, setSentStornoItem] = useState(null);
+  const [sentStornoQty, setSentStornoQty] = useState(1);
+  const [sentStornoReason, setSentStornoReason] = useState("operatorError");
+  const [sentStornoLoading, setSentStornoLoading] = useState(false);
   const [form] = Form.useForm();
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -38,6 +43,8 @@ const Homepage = () => {
   const [mobileView, setMobileView] = useState("menu"); // menu | cart
   const [itemSearch, setItemSearch] = useState("");
   const pendingOrderScrollRef = useRef(null);
+  const longPressTimerRef = useRef(null);
+  const longPressFiredRef = useRef(false);
   const isMobile = useIsMobile(768);
 
   const scrollToPendingItem = useCallback((itemId) => {
@@ -67,10 +74,37 @@ const Homepage = () => {
         message.error("Масата не е намерена!");
         navigate("/tables");
       } else {
+        const mergedPending = mergeLineItems(foundTable.pendingItems || []);
+        const mergedCart = mergeLineItems(foundTable.cartItems || []);
         setTable(foundTable);
-        setPendingItems(foundTable.pendingItems || []);
-        setCartItems(foundTable.cartItems || []);
+        setPendingItems(mergedPending);
+        setCartItems(mergedCart);
         setTotalAmount(foundTable.totalAmount || 0);
+
+        // Persist merged lines if DB still had duplicates
+        const pendingDup =
+          (foundTable.pendingItems || []).length !== mergedPending.length;
+        const cartDup = (foundTable.cartItems || []).length !== mergedCart.length;
+        if (pendingDup || cartDup) {
+          try {
+            if (cartDup) {
+              await axios.put("/api/tables/update-table-cart", {
+                tableId,
+                cartItems: mergedCart,
+                totalAmount: foundTable.totalAmount || 0,
+              });
+            }
+            if (pendingDup) {
+              await axios.put("/api/tables/update-table-pending-items", {
+                tableId,
+                pendingItems: mergedPending,
+                totalAmount: foundTable.totalAmount || 0,
+              });
+            }
+          } catch (e) {
+            console.error("Грешка при обединяване на дублирани артикули:", e);
+          }
+        }
       }
     } catch (error) {
       message.error("Грешка при зареждане на масата!");
@@ -147,12 +181,14 @@ const Homepage = () => {
             ? prev
             : foundTable
         );
-        setPendingItems((prev) =>
-          sameItems(prev, foundTable.pendingItems || []) ? prev : foundTable.pendingItems || []
-        );
-        setCartItems((prev) =>
-          sameItems(prev, foundTable.cartItems || []) ? prev : foundTable.cartItems || []
-        );
+        setPendingItems((prev) => {
+          const next = mergeLineItems(foundTable.pendingItems || []);
+          return sameItems(prev, next) ? prev : next;
+        });
+        setCartItems((prev) => {
+          const next = mergeLineItems(foundTable.cartItems || []);
+          return sameItems(prev, next) ? prev : next;
+        });
         setTotalAmount((prev) =>
           prev === (foundTable.totalAmount || 0) ? prev : foundTable.totalAmount || 0
         );
@@ -172,44 +208,98 @@ const Homepage = () => {
     };
   }, [tableId]);
 
-  // Добавяне на артикул към pendingItems с модал за забележка
-  const handleAddToCartWithNote = (item) => {
-    console.log('[DEBUG] Натиснат е бутона за добавяне на артикул:', item);
+  // Добавяне на артикул към pendingItems с модал за забележка (long-press / desktop)
+  const handleAddToCartWithNote = (item, options = {}) => {
     setItemToAdd(item);
-    setNoteValue("");
-    setAddQuantity(1);
+    const existing = pendingItems.find((i) => i._id === item._id);
+    setNoteValue(existing?.note || "");
+    // Long-press on existing: note edit (0 extra). Otherwise add at least 1.
+    setAddQuantity(options.noteFocus && existing ? 0 : 1);
     setIsNoteModalVisible(true);
   };
 
+  const handleQuickAdd = async (item) => {
+    const existing = pendingItems.find((i) => i._id === item._id);
+    let updatedPending;
+    if (existing) {
+      updatedPending = pendingItems.map((i) =>
+        i._id === item._id ? { ...i, quantity: i.quantity + 1 } : i
+      );
+    } else {
+      updatedPending = [...pendingItems, { ...item, quantity: 1, note: "" }];
+    }
+    await updatePendingInDB(updatedPending);
+  };
+
+  const handleQuickDec = async (item) => {
+    const existing = pendingItems.find((i) => i._id === item._id);
+    if (!existing) return;
+    let updatedPending;
+    if (existing.quantity <= 1) {
+      updatedPending = pendingItems.filter((i) => i._id !== item._id);
+    } else {
+      updatedPending = pendingItems.map((i) =>
+        i._id === item._id ? { ...i, quantity: i.quantity - 1 } : i
+      );
+    }
+    await updatePendingInDB(updatedPending);
+  };
+
+  const getPendingQty = (itemId) =>
+    pendingItems.find((i) => i._id === itemId)?.quantity || 0;
+
+  const clearLongPress = () => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current);
+      longPressTimerRef.current = null;
+    }
+  };
+
+  const startLongPress = (item) => {
+    longPressFiredRef.current = false;
+    clearLongPress();
+    longPressTimerRef.current = setTimeout(() => {
+      longPressFiredRef.current = true;
+      handleAddToCartWithNote(item, { noteFocus: true });
+    }, 500);
+  };
+
   const handleNoteModalOk = async () => {
-    console.log('[DEBUG] Потвърдено добавяне с бележка:', noteValue, itemToAdd, addQuantity);
     if (!itemToAdd) {
-      console.error('[DEBUG] itemToAdd е null!');
       setIsNoteModalVisible(false);
       return;
     }
-    const qty = Math.max(1, Number(addQuantity) || 1);
+    const extraQty = Math.max(0, Number(addQuantity) || 0);
+    const existing = pendingItems.find((i) => i._id === itemToAdd._id);
     let updatedPending;
-    const item = { ...itemToAdd, quantity: qty, note: noteValue };
-    const existing = pendingItems.find((i) => i._id === item._id);
     if (existing) {
+      const add = extraQty > 0 ? extraQty : 0;
       updatedPending = pendingItems.map((i) =>
-        i._id === item._id
-          ? { ...i, quantity: i.quantity + qty, note: noteValue || i.note }
+        i._id === itemToAdd._id
+          ? {
+              ...i,
+              quantity: i.quantity + add,
+              note: noteValue,
+            }
           : i
       );
     } else {
-      updatedPending = [...pendingItems, item];
+      const qty = Math.max(1, extraQty || 1);
+      updatedPending = [
+        ...pendingItems,
+        { ...itemToAdd, quantity: qty, note: noteValue },
+      ];
     }
-    console.log('[DEBUG] updatedPending:', updatedPending);
     await updatePendingInDB(updatedPending);
     setIsNoteModalVisible(false);
     setNoteValue("");
     setAddQuantity(1);
     setItemToAdd(null);
     setCartTab("pending");
-    setMobileView("cart");
-    scrollToPendingItem(item._id);
+    // Stay on menu on mobile (competitor UX); desktop cart is always visible
+    if (!isMobile) {
+      scrollToPendingItem(itemToAdd._id);
+    }
   };
 
   const handleNoteModalCancel = () => {
@@ -279,10 +369,15 @@ const Homepage = () => {
       
       console.log("[SEND TO KITCHEN] Артикули за изпращане:", itemsWithStatus);
       
-      // Мести pendingItems в cartItems и изчисти pendingItems
+      // Merge with existing sent items so same products become one line with summed qty
+      const mergedCart = mergeLineItems([
+        ...(table.cartItems || []),
+        ...itemsWithStatus,
+      ]);
+
       await axios.put("/api/tables/update-table-cart", {
         tableId,
-        cartItems: [...(table.cartItems || []), ...itemsWithStatus],
+        cartItems: mergedCart,
         totalAmount,
       });
       
@@ -372,21 +467,74 @@ const Homepage = () => {
       if (record.status === "Готово") {
         return <span style={{ color: 'green' }}><CheckCircleTwoTone twoToneColor="#52c41a" /> Готово</span>;
       }
-      let isDone = false;
-      for (const order of kitchenOrders) {
-        if (order.tableName === table.name) {
-          for (const item of order.items) {
-            if (item.name === record.name && item.done === true) {
-              isDone = true;
-              break;
-            }
-          }
-          if (isDone) break;
-        }
+      // kitchenOrders matching by name for live updates
+      const fromKitchen = (kitchenOrders || []).some((o) =>
+        (o.items || []).some(
+          (it) =>
+            it.done &&
+            (it.name || "").toLowerCase().trim() === (record.name || "").toLowerCase().trim() &&
+            o.tableName === table?.name
+        )
+      );
+      if (fromKitchen) {
+        return <span style={{ color: 'green' }}><CheckCircleTwoTone twoToneColor="#52c41a" /> Готово</span>;
       }
-      return isDone ? 
-        <span style={{ color: 'green' }}><CheckCircleTwoTone twoToneColor="#52c41a" /> Готово</span> : 
-        <span style={{ color: '#888' }}>Изпратено</span>;
+      return <span style={{ color: '#888' }}>Изпратено</span>;
+  };
+
+  const openSentStorno = (item) => {
+    const issued =
+      item.status === "Готово" ||
+      (kitchenOrders || []).some(
+        (o) =>
+          o.tableName === table?.name &&
+          (o.items || []).some(
+            (it) =>
+              it.done &&
+              (it.name || "").toLowerCase().trim() ===
+                (item.name || "").toLowerCase().trim()
+          )
+      );
+    if (issued) {
+      message.warning(
+        "Издаден артикул не може да се сторнира. Кухнята/барът трябва да натиснат „Върни“."
+      );
+      return;
+    }
+    setSentStornoItem(item);
+    setSentStornoQty(1);
+    setSentStornoReason("operatorError");
+  };
+
+  const submitSentStorno = async () => {
+    if (!sentStornoItem || !tableId) return;
+    setSentStornoLoading(true);
+    try {
+      const auth = localStorage.getItem("auth")
+        ? JSON.parse(localStorage.getItem("auth"))
+        : {};
+      const res = await axios.post("/api/stornos/create-pre-bill-storno", {
+        tableId,
+        itemId: sentStornoItem._id,
+        quantity: sentStornoQty,
+        reason: sentStornoReason,
+        userId: auth.userId,
+        userName: auth.name || auth.userId,
+      });
+      message.success(res.data.message || "Сторнирано");
+      if (res.data.table) {
+        setCartItems(mergeLineItems(res.data.table.cartItems || []));
+        setPendingItems(mergeLineItems(res.data.table.pendingItems || []));
+        setTable(res.data.table);
+      } else {
+        await fetchTable();
+      }
+      setSentStornoItem(null);
+    } catch (e) {
+      message.error(e.response?.data?.error || "Грешка при сторно");
+    } finally {
+      setSentStornoLoading(false);
+    }
   };
 
   // Изчисли общата сума за всички артикули (изпратени + текущи)
@@ -394,6 +542,10 @@ const Homepage = () => {
 
   // Общ брой бройки (не само видове артикули)
   const cartPiecesCount = [...cartItems, ...pendingItems].reduce(
+    (sum, i) => sum + (Number(i.quantity) || 0),
+    0
+  );
+  const pendingPiecesCount = pendingItems.reduce(
     (sum, i) => sum + (Number(i.quantity) || 0),
     0
   );
@@ -484,36 +636,145 @@ const Homepage = () => {
           </div>
         )}
 
-        {(!isMobile || mobileView === "menu") && (
+        {isMobile && mobileView === "menu" && (
+          <div className="order-mobile-menu">
+            <div className="order-mobile-split">
+              {!searchQuery && (
+                <aside className="order-mobile-cats">
+                  {categories.map((category) => (
+                    <button
+                      key={category._id}
+                      type="button"
+                      className={`order-mobile-cat ${selectedCategory === category.name ? "active" : ""}`}
+                      onClick={() => setSelectedCategory(category.name)}
+                    >
+                      {category.name}
+                    </button>
+                  ))}
+                </aside>
+              )}
+              <div className="order-mobile-items">
+                <Input
+                  allowClear
+                  size="large"
+                  className="order-item-search"
+                  placeholder="Търси артикул..."
+                  prefix={<SearchOutlined style={{ color: "#888" }} />}
+                  value={itemSearch}
+                  onChange={(e) => setItemSearch(e.target.value)}
+                />
+                <div className="order-mobile-item-list">
+                  {filteredItems.length === 0 ? (
+                    <div className="order-item-search-empty">
+                      {searchQuery
+                        ? `Няма артикул „${itemSearch.trim()}“`
+                        : "Няма артикули в тази категория"}
+                    </div>
+                  ) : (
+                    filteredItems.map((item) => {
+                      const qty = getPendingQty(item._id);
+                      return (
+                        <div
+                          key={item._id}
+                          className="order-mobile-item-row"
+                          onTouchStart={() => startLongPress(item)}
+                          onTouchEnd={clearLongPress}
+                          onTouchMove={clearLongPress}
+                          onTouchCancel={clearLongPress}
+                          onContextMenu={(e) => {
+                            e.preventDefault();
+                            handleAddToCartWithNote(item, { noteFocus: true });
+                          }}
+                        >
+                          <div className="order-mobile-item-info">
+                            <span className="order-mobile-item-name">{item.name}</span>
+                            <span className="order-mobile-item-price">{formatPrice(item.price)}</span>
+                          </div>
+                          <div className="order-mobile-item-qty">
+                            <Button
+                              className="order-mobile-qty-btn"
+                              icon={<MinusOutlined />}
+                              disabled={qty === 0}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                clearLongPress();
+                                handleQuickDec(item);
+                              }}
+                              onTouchStart={(e) => e.stopPropagation()}
+                            />
+                            <span className="order-mobile-qty-value">{qty}</span>
+                            <Button
+                              type="primary"
+                              className="order-mobile-qty-btn"
+                              icon={<PlusOutlined />}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                clearLongPress();
+                                if (longPressFiredRef.current) {
+                                  longPressFiredRef.current = false;
+                                  return;
+                                }
+                                handleQuickAdd(item);
+                              }}
+                              onTouchStart={(e) => e.stopPropagation()}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="order-mobile-done-bar">
+              <Button
+                type="primary"
+                size="large"
+                block
+                className="order-mobile-done-btn"
+                icon={<ShoppingCartOutlined />}
+                onClick={() => {
+                  setCartTab("pending");
+                  setMobileView("cart");
+                }}
+              >
+                Готово
+                {pendingPiecesCount > 0 && (
+                  <span className="order-mobile-done-badge">{pendingPiecesCount}</span>
+                )}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {!isMobile && (
           <Row
             gutter={[16, 16]}
             className="order-main-row"
-            style={isMobile ? undefined : { flex: 1, minHeight: 0, overflow: "hidden" }}
+            style={{ flex: 1, minHeight: 0, overflow: "hidden" }}
           >
-            {!isMobile && (
-              <Col md={6} lg={5} className="order-col-scroll">
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
-                  {categories.map((category) => (
-                    <div
-                      key={category._id}
-                      className={`d-flex category ${selectedCategory === category.name && "category-active"}`}
-                      style={{
-                        width: "100%",
-                        marginBottom: 16,
-                        background: "#003366",
-                        justifyContent: "flex-start",
-                        cursor: "pointer",
-                      }}
-                      onClick={() => setSelectedCategory(category.name)}
-                    >
-                      <h4 style={{ color: "white" }}>{category.name}</h4>
-                    </div>
-                  ))}
-                </div>
-              </Col>
-            )}
+            <Col md={6} lg={5} className="order-col-scroll">
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start" }}>
+                {categories.map((category) => (
+                  <div
+                    key={category._id}
+                    className={`d-flex category ${selectedCategory === category.name && "category-active"}`}
+                    style={{
+                      width: "100%",
+                      marginBottom: 16,
+                      background: "#003366",
+                      justifyContent: "flex-start",
+                      cursor: "pointer",
+                    }}
+                    onClick={() => setSelectedCategory(category.name)}
+                  >
+                    <h4 style={{ color: "white" }}>{category.name}</h4>
+                  </div>
+                ))}
+              </div>
+            </Col>
 
-            <Col xs={24} md={isMobile ? 24 : 10} lg={isMobile ? 24 : 11} className="order-col-scroll">
+            <Col md={10} lg={11} className="order-col-scroll">
               <Input
                 allowClear
                 size="large"
@@ -523,20 +784,6 @@ const Homepage = () => {
                 value={itemSearch}
                 onChange={(e) => setItemSearch(e.target.value)}
               />
-              {isMobile && !searchQuery && (
-                <div className="order-category-chips">
-                  {categories.map((category) => (
-                    <button
-                      key={category._id}
-                      type="button"
-                      className={`order-category-chip ${selectedCategory === category.name ? "active" : ""}`}
-                      onClick={() => setSelectedCategory(category.name)}
-                    >
-                      {category.name}
-                    </button>
-                  ))}
-                </div>
-              )}
               <Row gutter={[12, 12]}>
                 {filteredItems.length === 0 ? (
                   <Col span={24}>
@@ -548,7 +795,7 @@ const Homepage = () => {
                   </Col>
                 ) : (
                   filteredItems.map((item) => (
-                    <Col xs={24} sm={12} md={24} lg={12} key={item._id}>
+                    <Col sm={12} md={24} lg={12} key={item._id}>
                       <div
                         role="button"
                         tabIndex={0}
@@ -583,25 +830,25 @@ const Homepage = () => {
               </Row>
             </Col>
 
-            {!isMobile && (
-              <Col md={8} lg={8} style={{ height: "100%", display: "flex", flexDirection: "column" }}>
-                <OrderCartPanel
-                  isMobile={false}
-                  tableName={table.name}
-                  pendingItems={pendingItems}
-                  cartItems={cartItems}
-                  cartTab={cartTab}
-                  setCartTab={setCartTab}
-                  grandTotal={grandTotal}
-                  onChangeQuantity={handleChangeQuantity}
-                  onRemove={handleRemoveFromCart}
-                  onSendToKitchen={handleSendToKitchen}
-                  onGenerateBill={handleGenerateBillClick}
-                  getSentStatus={getSentStatus}
-                  pendingScrollRef={pendingOrderScrollRef}
-                />
-              </Col>
-            )}
+            <Col md={8} lg={8} style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+              <OrderCartPanel
+                isMobile={false}
+                tableName={table.name}
+                pendingItems={pendingItems}
+                cartItems={cartItems}
+                cartTab={cartTab}
+                setCartTab={setCartTab}
+                grandTotal={grandTotal}
+                onChangeQuantity={handleChangeQuantity}
+                onRemove={handleRemoveFromCart}
+                onEditNote={(item) => handleAddToCartWithNote(item, { noteFocus: true })}
+                onStornoSent={openSentStorno}
+                onSendToKitchen={handleSendToKitchen}
+                onGenerateBill={handleGenerateBillClick}
+                getSentStatus={getSentStatus}
+                pendingScrollRef={pendingOrderScrollRef}
+              />
+            </Col>
           </Row>
         )}
 
@@ -616,6 +863,8 @@ const Homepage = () => {
             grandTotal={grandTotal}
             onChangeQuantity={handleChangeQuantity}
             onRemove={handleRemoveFromCart}
+            onEditNote={(item) => handleAddToCartWithNote(item, { noteFocus: true })}
+            onStornoSent={openSentStorno}
             onSendToKitchen={handleSendToKitchen}
             onGenerateBill={handleGenerateBillClick}
             getSentStatus={getSentStatus}
@@ -692,7 +941,7 @@ const Homepage = () => {
 
       {/* Модален прозорец за забележка и количество */}
       <Modal
-        title={itemToAdd ? `Добави: ${itemToAdd.name}` : "Добави артикул"}
+        title={itemToAdd ? `Забележка: ${itemToAdd.name}` : "Добави артикул"}
         visible={isNoteModalVisible}
         onOk={handleNoteModalOk}
         onCancel={handleNoteModalCancel}
@@ -716,26 +965,28 @@ const Homepage = () => {
         centered
       >
         <div style={{ marginBottom: 16 }}>
-          <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 16 }}>Количество</div>
+          <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 16 }}>
+            {isMobile ? "Допълнително количество" : "Количество"}
+          </div>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <Button
               size="large"
-              onClick={() => setAddQuantity((q) => Math.max(1, (Number(q) || 1) - 1))}
+              onClick={() => setAddQuantity((q) => Math.max(0, (Number(q) || 0) - 1))}
               style={{ minWidth: 48, height: 44, fontSize: 22, borderRadius: 8 }}
             >
               −
             </Button>
             <InputNumber
-              min={1}
+              min={0}
               max={99}
               value={addQuantity}
-              onChange={(v) => setAddQuantity(Math.max(1, Number(v) || 1))}
+              onChange={(v) => setAddQuantity(Math.max(0, Number(v) || 0))}
               style={{ width: 80, height: 44, fontSize: 20 }}
             />
             <Button
               size="large"
               type="primary"
-              onClick={() => setAddQuantity((q) => Math.min(99, (Number(q) || 1) + 1))}
+              onClick={() => setAddQuantity((q) => Math.min(99, (Number(q) || 0) + 1))}
               style={{ minWidth: 48, height: 44, fontSize: 22, borderRadius: 8 }}
             >
               +
@@ -744,12 +995,68 @@ const Homepage = () => {
         </div>
         <div style={{ fontWeight: 600, marginBottom: 8, fontSize: 16 }}>Забележка</div>
         <Input.TextArea
-          placeholder="Въведете забележка (по желание)"
+          placeholder={
+            isMobile
+              ? "Забележка (дълго натискане на реда)"
+              : "Въведете забележка (по желание)"
+          }
           value={noteValue}
           onChange={(e) => setNoteValue(e.target.value)}
           autoSize={{ minRows: 3, maxRows: 6 }}
           style={{ fontSize: 18, borderRadius: 8, padding: 8 }}
         />
+      </Modal>
+      {/* Pre-bill сторно на изпратен артикул */}
+      <Modal
+        title={sentStornoItem ? `Сторно: ${sentStornoItem.name}` : "Сторно"}
+        visible={!!sentStornoItem}
+        onCancel={() => setSentStornoItem(null)}
+        onOk={submitSentStorno}
+        confirmLoading={sentStornoLoading}
+        okText="Сторнирай"
+        cancelText="Отказ"
+        okButtonProps={{ danger: true }}
+      >
+        {sentStornoItem && (
+          <>
+            <p>
+              Маха се от изпратените и се маха от кухнята/бара (ако още не е
+              издадено).
+            </p>
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontWeight: 600, marginBottom: 6 }}>Количество</div>
+              <InputNumber
+                min={1}
+                max={Number(sentStornoItem.quantity) || 1}
+                value={sentStornoQty}
+                onChange={(v) =>
+                  setSentStornoQty(
+                    Math.min(
+                      Number(sentStornoItem.quantity) || 1,
+                      Math.max(1, Number(v) || 1)
+                    )
+                  )
+                }
+              />
+              <span style={{ marginLeft: 8 }}>
+                / {sentStornoItem.quantity}
+              </span>
+            </div>
+            <div>
+              <div style={{ fontWeight: 600, marginBottom: 6 }}>Причина</div>
+              <Select
+                style={{ width: "100%" }}
+                value={sentStornoReason}
+                onChange={setSentStornoReason}
+              >
+                <Select.Option value="operatorError">Операторска грешка</Select.Option>
+                <Select.Option value="returnedItems">Върната стока</Select.Option>
+                <Select.Option value="defectiveGoods">Дефектна стока</Select.Option>
+                <Select.Option value="other">Друго</Select.Option>
+              </Select>
+            </div>
+          </>
+        )}
       </Modal>
     </DefaultLayout>
   );

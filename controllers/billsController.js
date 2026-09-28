@@ -1,44 +1,109 @@
 const billsModel = require("../models/billsModel");
 const Report = require("../models/reportModel");
-const fiscalService = require('../services/fiscalService');
-const Recipe = require('../models/recipeModel');
-const Inventory = require('../models/inventoryModel');
+const fiscalService = require("../services/fiscalService");
+const Recipe = require("../models/recipeModel");
+const Inventory = require("../models/inventoryModel");
+const { buildSalesReport, buildByHour } = require("../utils/buildSalesReport");
+const Item = require("../models/itemModel");
+const Storno = require("../models/stornoModel");
 
-//add items
+async function resolveReportUserFilter(userId) {
+  if (!userId) return null;
+  const User = require("../models/userModel");
+  try {
+    if (/^[0-9a-fA-F]{24}$/.test(userId)) {
+      const user = await User.findById(userId);
+      if (user) return user.userId;
+    }
+  } catch (_) {
+    /* use as-is */
+  }
+  return userId;
+}
+
+async function buildCategoryBreakdown(bills) {
+  const byCategory = {};
+  const itemIds = new Set();
+  bills.forEach((bill) => {
+    (bill.cartItems || []).forEach((item) => {
+      if (item._id) itemIds.add(String(item._id));
+    });
+  });
+  const items = await Item.find({ _id: { $in: Array.from(itemIds) } }).lean();
+  const idToCategory = {};
+  items.forEach((it) => {
+    idToCategory[String(it._id)] = it.category || "Без категория";
+  });
+
+  bills.forEach((bill) => {
+    (bill.cartItems || []).forEach((item) => {
+      const cat =
+        idToCategory[String(item._id)] || item.category || "Без категория";
+      if (!byCategory[cat]) byCategory[cat] = { quantity: 0, total: 0 };
+      byCategory[cat].quantity += Number(item.quantity) || 0;
+      byCategory[cat].total +=
+        (Number(item.price) || 0) * (Number(item.quantity) || 0);
+    });
+  });
+  return byCategory;
+}
+
+async function sumStornoForPeriod(from, to, userId) {
+  const query = {};
+  if (from && to) {
+    query.createdAt = { $gte: new Date(from), $lte: new Date(to) };
+  }
+  if (userId) query.userId = userId;
+  const stornos = await Storno.find(query).lean();
+  return stornos.reduce((sum, s) => sum + (Number(s.totalAmount) || 0), 0);
+}
+
 const addBillsController = async (req, res) => {
   try {
-    console.log("Данни за нова сметка:", {
-      totalAmount: req.body.totalAmount,
-      userId: req.body.userId
+    const newBill = new billsModel({
+      ...req.body,
+      fiscalStatus: "pending",
     });
-    
-    const newBill = new billsModel(req.body);
     await newBill.save();
-    console.log("Сметката е създадена успешно с ID:", newBill._id);
 
-    // --- Автоматично изписване на суровини по рецепта ---
-    for (const cartItem of req.body.cartItems) {
-      // cartItem._id е id на ястието (item)
+    for (const cartItem of req.body.cartItems || []) {
       const recipe = await Recipe.findOne({ item: cartItem._id });
       if (recipe) {
         for (const ing of recipe.ingredients) {
-          // Намаляваме quantity в склада с ing.quantity * cartItem.quantity
           const inventory = await Inventory.findById(ing.inventory);
           if (inventory) {
             const amountToDeduct = ing.quantity * cartItem.quantity;
-            inventory.quantity = Math.round((inventory.quantity - amountToDeduct) * 100) / 100;
+            inventory.quantity =
+              Math.round((inventory.quantity - amountToDeduct) * 100) / 100;
             inventory.history.push({
-              type: 'out',
+              type: "out",
               amount: amountToDeduct,
-              user: req.body.userId || 'sale',
-              note: `Продажба на ${cartItem.name}`
+              user: req.body.userId || "sale",
+              note: `Продажба на ${cartItem.name}`,
             });
             await inventory.save();
           }
         }
       }
     }
-    // --- Край на автоматичното изписване ---
+
+    try {
+      const fiscalResult = await fiscalService.printReceipt(newBill);
+      newBill.fiscalReceiptId = fiscalResult.fiscalReceiptId;
+      newBill.fiscalReceiptDateTime = fiscalResult.receiptDateTime;
+      newBill.fiscalMemorySerialNumber = fiscalResult.fiscalMemorySerialNumber;
+      newBill.fiscalDeviceSerialNumber = fiscalResult.fiscalDeviceSerialNumber;
+      newBill.uniqueSaleNumber = fiscalResult.uniqueSaleNumber;
+      newBill.fiscalStatus = "completed";
+      newBill.fiscalErrorMessage = undefined;
+      await newBill.save();
+    } catch (fiscalError) {
+      console.log("[BILL] Fiscal error:", fiscalError);
+      newBill.fiscalStatus = "error";
+      newBill.fiscalErrorMessage =
+        fiscalError.message || "Грешка при фискализация";
+      await newBill.save();
+    }
 
     res.send("Bill Created Successfully!");
   } catch (error) {
@@ -47,181 +112,138 @@ const addBillsController = async (req, res) => {
   }
 };
 
-//get blls data
 const getBillsController = async (req, res) => {
   try {
-    // Check if user role is provided in query params
-    const { role, userId } = req.query;
-    
-    console.log(`GET /api/bills/get-bills с параметри: role=${role}, userId=${userId}`);
-    
+    const {
+      role,
+      userId,
+      from,
+      to,
+      paymentMode,
+      tableName,
+      includeStornoed,
+    } = req.query;
+
     let query = {};
-    
-    // If role is not admin and userId is provided, filter by userId
-    if (role !== 'admin' && userId) {
+
+    if (role !== "admin" && userId) {
       query = { userId };
-      console.log(`Филтриране на сметки за потребител ${userId} с роля ${role}`);
-    } else {
-      console.log(`Показване на всички сметки (admin)`);
     }
-    // Винаги изключвай сторнираните сметки
-    query.isStornoed = { $ne: true };
-    
-    // Изведи всички сметки, които са в базата и техните полета userId
-    const allBills = await billsModel.find({});
-    console.log(`Общ брой сметки в базата данни: ${allBills.length}`);
-    if (allBills.length > 0) {
-      console.log('Всички userIds в базата данни:');
-      allBills.forEach((bill, index) => {
-        console.log(`Сметка ${index + 1}: userId = ${bill.userId}`);
-      });
+
+    if (from && to) {
+      query.date = { $gte: new Date(from), $lte: new Date(to) };
     }
-    
-    // Търсене по специфичен филтър
-    const bills = await billsModel.find(query);
-    console.log(`Намерени сметки по филтър: ${bills.length}`);
-    
-    // Отпечатай първите няколко сметки за дебъгване
-    if (bills.length > 0) {
-      console.log('Примерна намерена сметка:', {
-        id: bills[0]._id,
-        userId: bills[0].userId
-      });
+    if (paymentMode) {
+      if (paymentMode === "cash" || paymentMode === "Брой") {
+        query.paymentMode = { $in: ["cash", "Брой"] };
+      } else if (paymentMode === "card" || paymentMode === "Карта") {
+        query.paymentMode = { $in: ["card", "Карта"] };
+      } else {
+        query.paymentMode = paymentMode;
+      }
     }
-    
+    if (tableName) {
+      query.tableName = tableName;
+    }
+
+    if (includeStornoed !== "true" && includeStornoed !== "1") {
+      query.isStornoed = { $ne: true };
+    }
+
+    const bills = await billsModel.find(query).sort({ date: -1 });
     res.send(bills);
   } catch (error) {
     console.log(error);
-    res.status(500).send('Error fetching bills');
+    res.status(500).send("Error fetching bills");
   }
 };
 
-// X/Z отчет
 const getReportController = async (req, res) => {
   try {
     const { from, to, userId } = req.query;
-    console.log(`[GET REPORT] Получени параметри: from=${from}, to=${to}, userId=${userId}`);
-    
+
     const filter = {};
     if (from && to) {
       filter.date = { $gte: new Date(from), $lte: new Date(to) };
-      console.log(`[GET REPORT] Филтриране по период: ${new Date(from).toLocaleString()} - ${new Date(to).toLocaleString()}`);
     }
-    
-    // Check if we received ObjectId or userId (string identifier)
-    if (userId) {
-      // First try to find user by _id (ObjectId)
-      const User = require("../models/userModel");
-      let user = null;
-      
-      try {
-        if (/^[0-9a-fA-F]{24}$/.test(userId)) {
-          console.log(`[GET REPORT] Търсене на потребител по _id: ${userId}`);
-          user = await User.findById(userId);
-        }
-        
-        // If user found by _id
-        if (user) {
-          console.log(`[GET REPORT] Намерен потребител по _id: ${user.name} (${user.userId})`);
-          filter.userId = user.userId; // We filter by userId, not by _id
-        } else {
-          // If not found by _id, use the userId directly
-          console.log(`[GET REPORT] Директно филтриране по userId: ${userId}`);
-          filter.userId = userId;
-        }
-      } catch (error) {
-        console.log(`[GET REPORT] Грешка при търсене на потребител: ${error.message}`);
-        filter.userId = userId; // Fallback to using the userId as-is
-      }
+
+    const resolvedUserId = await resolveReportUserFilter(userId);
+    if (resolvedUserId) {
+      filter.userId = resolvedUserId;
     }
-    
-    console.log(`[GET REPORT] Финален филтър за търсене: ${JSON.stringify(filter)}`);
-    
-    // Изключи сторнираните сметки
+
     filter.isStornoed = { $ne: true };
     const bills = await billsModel.find(filter);
-    console.log(`[GET REPORT] Намерени ${bills.length} сметки по зададения филтър`);
-    
-    // Log the first few bills to debug
-    if (bills.length > 0) {
-      console.log(`[GET REPORT] Първи ${Math.min(3, bills.length)} намерени сметки:`);
-      bills.slice(0, 3).forEach((bill, i) => {
-        console.log(`Сметка ${i+1}: id=${bill._id}, потребител=${bill.userId}, сума=${bill.totalAmount}, артикули=${(bill.cartItems || []).length}`);
-      });
-    } else {
-      console.log(`[GET REPORT] Не бяха намерени сметки за зададения период и потребител`);
+
+    const base = buildSalesReport(bills);
+    let byCategory = {};
+    try {
+      byCategory = await buildCategoryBreakdown(bills);
+    } catch (e) {
+      console.log("[GET REPORT] Category breakdown skipped:", e.message);
     }
-    
-    // Сумиране
-    const totalAmount = bills.reduce((sum, b) => sum + (b.totalAmount || 0), 0);
-    const totalBills = bills.length;
-    const byPayment = bills.reduce((acc, b) => {
-      let key = b.paymentMode;
-      if (key === "Брой") key = "cash";
-      if (key === "Карта") key = "card";
-      acc[key] = (acc[key] || 0) + (b.totalAmount || 0);
-      return acc;
-    }, {});
-    // Разбивка по артикули
-    const items = {};
-    bills.forEach(bill => {
-      (bill.cartItems || []).forEach(item => {
-        if (!items[item.name]) items[item.name] = { quantity: 0, total: 0 };
-        items[item.name].quantity += item.quantity;
-        items[item.name].total += item.price * item.quantity;
-      });
-    });
-    
-    console.log(`[GET REPORT] Обобщение: общо=${totalAmount}, брой сметки=${totalBills}, артикули=${Object.keys(items).length}`);
-    
+    const byHour = buildByHour(bills);
+    const stornoAmount = await sumStornoForPeriod(
+      from,
+      to,
+      resolvedUserId || undefined
+    );
+
+    const stornoQuery = {};
+    if (from && to) {
+      stornoQuery.createdAt = { $gte: new Date(from), $lte: new Date(to) };
+    }
+    if (resolvedUserId) stornoQuery.userId = resolvedUserId;
+    const stornoDocs = await Storno.find(stornoQuery).sort({ createdAt: -1 }).lean();
+    const preBillStornos = stornoDocs.filter((s) => s.type === "pre_bill");
+    const billStornos = stornoDocs.filter((s) => s.type !== "pre_bill");
+
     res.json({
-      totalAmount,
-      totalBills,
-      byPayment,
-      items,
-      bills, // по желание: махни ако не искаш целите сметки
+      ...base,
+      byCategory,
+      byHour,
+      stornoAmount,
+      netAmount: base.totalAmount - stornoAmount,
+      preBillStornos,
+      billStornos,
+      stornos: stornoDocs,
+      bills,
     });
   } catch (error) {
-    console.log(`[GET REPORT] Грешка при генериране на отчет: ${error.message}`);
-    res.status(500).json({ message: "Грешка при генериране на отчет!", error: error.message });
+    console.log(`[GET REPORT] Грешка: ${error.message}`);
+    res
+      .status(500)
+      .json({ message: "Грешка при генериране на отчет!", error: error.message });
   }
 };
 
-// Създаване и архивиране на Z отчет
 const createZReportController = async (req, res) => {
   try {
     const { from, to, userId } = req.body;
-    // Проверка за вече съществуващ Z отчет за този ден/период
     const existing = await Report.findOne({
       type: "Z",
       from: new Date(from),
       to: new Date(to),
     });
     if (existing) {
-      return res.status(400).json({ message: "Вече има Z отчет за този период!" });
+      return res
+        .status(400)
+        .json({ message: "Вече има Z отчет за този период!" });
     }
-    const filter = {};
+    const filter = {
+      isStornoed: { $ne: true },
+      includedInZReport: { $ne: true },
+    };
     if (from && to) {
       filter.date = { $gte: new Date(from), $lte: new Date(to) };
     }
     if (userId) {
       filter.userId = userId;
     }
+
     const bills = await billsModel.find(filter);
-    const totalAmount = bills.reduce((sum, b) => sum + (b.totalAmount || 0), 0);
-    const totalBills = bills.length;
-    const byPayment = bills.reduce((acc, b) => {
-      acc[b.paymentMode] = (acc[b.paymentMode] || 0) + (b.totalAmount || 0);
-      return acc;
-    }, {});
-    const items = {};
-    bills.forEach(bill => {
-      (bill.cartItems || []).forEach(item => {
-        if (!items[item.name]) items[item.name] = { quantity: 0, total: 0 };
-        items[item.name].quantity += item.quantity;
-        items[item.name].total += item.price * item.quantity;
-      });
-    });
+    const { totalAmount, totalBills, byPayment, items } = buildSalesReport(bills);
+
     const report = new Report({
       type: "Z",
       from: new Date(from),
@@ -234,23 +256,57 @@ const createZReportController = async (req, res) => {
       bills,
     });
     await report.save();
+
+    const billIds = bills.map((b) => b._id);
+    if (billIds.length) {
+      await billsModel.updateMany(
+        { _id: { $in: billIds } },
+        { $set: { includedInZReport: true, zReportId: report._id } }
+      );
+    }
+
+    // Optional: print Z on fiscal device when not in test mode
+    try {
+      if (!fiscalService.isTestMode) {
+        const deviceZ = await fiscalService.printZReport();
+        report.isSynchronized = true;
+        report.synchronizedAt = new Date();
+        report.isTestMode = false;
+        report.fiscalReportId =
+          deviceZ.fiscalReportId || deviceZ.receiptNumber || `FP-Z-${Date.now()}`;
+        await report.save();
+      } else {
+        report.isSynchronized = true;
+        report.synchronizedAt = new Date();
+        report.isTestMode = true;
+        report.fiscalReportId = report.fiscalReportId || `TEST-Z-${Date.now()}`;
+        await report.save();
+      }
+    } catch (fiscalZErr) {
+      console.log("[Z] Device Z print error:", fiscalZErr.message);
+      report.isSynchronized = false;
+      await report.save();
+    }
+
     res.json(report);
   } catch (error) {
-    res.status(500).json({ message: "Грешка при създаване на Z отчет!", error });
+    res
+      .status(500)
+      .json({ message: "Грешка при създаване на Z отчет!", error });
   }
 };
 
-// Връща всички Z отчети
 const getZReportsController = async (req, res) => {
   try {
     const reports = await Report.find({ type: "Z" }).sort({ from: -1 });
     res.json(reports);
   } catch (error) {
-    res.status(500).json({ message: "Грешка при зареждане на Z отчетите!", error });
+    res
+      .status(500)
+      .json({ message: "Грешка при зареждане на Z отчетите!", error });
   }
 };
 
-// Z отчет по ID
 const getZReportByIdController = async (req, res) => {
   try {
     const report = await Report.findById(req.params.id);
@@ -259,11 +315,13 @@ const getZReportByIdController = async (req, res) => {
     }
     res.json(report);
   } catch (error) {
-    res.status(500).json({ message: "Грешка при зареждане на Z отчета!", error: error.message });
+    res.status(500).json({
+      message: "Грешка при зареждане на Z отчета!",
+      error: error.message,
+    });
   }
 };
 
-// Несинхронизирани Z отчети (за client cron)
 const getUnsynchronizedReportsController = async (req, res) => {
   try {
     const reports = await Report.find({
@@ -280,11 +338,10 @@ const getUnsynchronizedReportsController = async (req, res) => {
   }
 };
 
-// Проверка за нов Z отчет (тестов/фискален stub)
+/** Disabled auto-create of empty test Z — manual Z only */
 const checkZReportController = async (req, res) => {
   try {
-    const report = await fiscalService.checkForNewZReport();
-    res.json(report);
+    res.json(null);
   } catch (error) {
     res.status(500).json({
       message: "Грешка при проверка за нов Z отчет!",
@@ -293,31 +350,151 @@ const checkZReportController = async (req, res) => {
   }
 };
 
-// Ръчна синхронизация на Z отчет
 const syncZReportController = async (req, res) => {
   try {
     const { reportId } = req.params;
     const report = await fiscalService.synchronizeZReport(reportId);
     res.json(report);
   } catch (error) {
-    res.status(500).json({ message: "Грешка при синхронизация на Z отчет!", error: error.message });
+    res.status(500).json({
+      message: "Грешка при синхронизация на Z отчет!",
+      error: error.message,
+    });
   }
 };
 
-// Вземане на конкретен бон по ID
 const getBillByIdController = async (req, res) => {
   try {
     const { id } = req.params;
     const bill = await billsModel.findById(id);
-    
+
     if (!bill) {
       return res.status(404).json({ error: "Бонът не е намерен" });
     }
-    
+
     res.status(200).json(bill);
   } catch (error) {
     console.log("Грешка при вземане на бон по ID:", error);
-    res.status(500).json({ error: "Възникна грешка при вземане на данни за бона" });
+    res
+      .status(500)
+      .json({ error: "Възникна грешка при вземане на данни за бона" });
+  }
+};
+
+const getDashboardController = async (req, res) => {
+  try {
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    const end = new Date();
+    end.setHours(23, 59, 59, 999);
+
+    const bills = await billsModel.find({
+      date: { $gte: start, $lte: end },
+      isStornoed: { $ne: true },
+    });
+    const sales = buildSalesReport(bills);
+    const stornoAmount = await sumStornoForPeriod(start, end);
+    const stornoCount = await Storno.countDocuments({
+      createdAt: { $gte: start, $lte: end },
+    });
+
+    const Table = require("../models/tableModel");
+    const openTables = await Table.countDocuments({
+      $or: [
+        { "cartItems.0": { $exists: true } },
+        { "pendingItems.0": { $exists: true } },
+      ],
+    });
+
+    const topItems = Object.entries(sales.items)
+      .map(([name, v]) => ({ name, quantity: v.quantity, total: v.total }))
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 10);
+
+    res.json({
+      date: start.toISOString().slice(0, 10),
+      totalAmount: sales.totalAmount,
+      netAmount: sales.totalAmount - stornoAmount,
+      totalBills: sales.totalBills,
+      byPayment: sales.byPayment,
+      stornoAmount,
+      stornoCount,
+      openTables,
+      topItems,
+    });
+  } catch (error) {
+    console.log("[DASHBOARD]", error);
+    res.status(500).json({
+      message: "Грешка при зареждане на dashboard!",
+      error: error.message,
+    });
+  }
+};
+
+const getFiscalStatusController = async (req, res) => {
+  try {
+    const status = await fiscalService.getStatus();
+    res.json(status);
+  } catch (error) {
+    res.status(500).json({
+      ok: false,
+      message: "Грешка при проверка на фискалния статус",
+      error: error.message,
+    });
+  }
+};
+
+const getInventoryReportController = async (req, res) => {
+  try {
+    const { from, to } = req.query;
+    const fromDate = from ? new Date(from) : new Date(Date.now() - 7 * 864e5);
+    const toDate = to ? new Date(to) : new Date();
+
+    const inventories = await Inventory.find({}).lean();
+    const movements = [];
+
+    inventories.forEach((inv) => {
+      (inv.history || []).forEach((h) => {
+        const d = new Date(h.date || h.createdAt || Date.now());
+        if (d >= fromDate && d <= toDate) {
+          movements.push({
+            inventoryId: inv._id,
+            name: inv.name,
+            unit: inv.unit,
+            type: h.type,
+            amount: h.amount,
+            note: h.note,
+            user: h.user,
+            date: d,
+          });
+        }
+      });
+    });
+
+    const consumption = {};
+    const restores = {};
+    movements.forEach((m) => {
+      const key = m.name;
+      if (m.type === "out") {
+        consumption[key] =
+          Math.round(((consumption[key] || 0) + Number(m.amount || 0)) * 100) / 100;
+      } else if (m.type === "in") {
+        restores[key] =
+          Math.round(((restores[key] || 0) + Number(m.amount || 0)) * 100) / 100;
+      }
+    });
+
+    res.json({
+      from: fromDate,
+      to: toDate,
+      movements: movements.sort((a, b) => new Date(b.date) - new Date(a.date)),
+      consumption,
+      restores,
+    });
+  } catch (error) {
+    res
+      .status(500)
+      .json({ message: "Грешка при складов отчет!", error: error.message });
   }
 };
 
@@ -332,4 +509,7 @@ module.exports = {
   checkZReportController,
   syncZReportController,
   getBillByIdController,
+  getDashboardController,
+  getInventoryReportController,
+  getFiscalStatusController,
 };

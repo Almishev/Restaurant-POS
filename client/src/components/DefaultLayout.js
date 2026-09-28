@@ -122,6 +122,11 @@ const DefaultLayout = ({ children }) => {
               <Link to="/bar">Бар</Link>
             </Menu.Item>
           )}
+          {userRole === "admin" && (
+            <Menu.Item key="/dashboard" icon={<CopyOutlined />}>
+              <Link to="/dashboard">Dashboard</Link>
+            </Menu.Item>
+          )}
           {!stationOnly && (
             <Menu.Item key="/reports" icon={<CopyOutlined />}>
               <Link to="/reports">Отчети</Link>
@@ -135,6 +140,11 @@ const DefaultLayout = ({ children }) => {
           {userRole === "admin" && (
             <Menu.Item key="/storno-report" icon={<FileSearchOutlined />}>
               <Link to="/storno-report">Отчет Сторно</Link>
+            </Menu.Item>
+          )}
+          {userRole === "admin" && (
+            <Menu.Item key="/inventory-report" icon={<HddOutlined />}>
+              <Link to="/inventory-report">Складов отчет</Link>
             </Menu.Item>
           )}
           <Menu.Item

@@ -43,16 +43,10 @@ const StornoListPage = () => {
       try {
         const parsedUserData = JSON.parse(userDataStr);
         setUserData(parsedUserData);
-        getAllStornos(parsedUserData).then(() => {
-          // Ако имаме stornoId в location, отваряме детайлите
-          if (location.state?.stornoId) {
-            setTimeout(() => {
-              // Търсим сторно операцията с този ID
-              const storno = stornos.find(s => s._id === location.state.stornoId);
-              if (storno) {
-                viewStornoDetails(storno);
-              }
-            }, 500); // Малко закъснение, за да се заредят данните
+        getAllStornos(parsedUserData).then((list) => {
+          if (location.state?.stornoId && Array.isArray(list)) {
+            const storno = list.find((s) => s._id === location.state.stornoId);
+            if (storno) viewStornoDetails(storno);
           }
         });
       } catch (error) {
@@ -87,21 +81,42 @@ const StornoListPage = () => {
       dispatch({
         type: "HIDE_LOADING",
       });
+      return data;
     } catch (error) {
       dispatch({
         type: "HIDE_LOADING",
       });
       message.error("Възникна грешка при зареждане на данни за сторно операциите");
       console.log(error);
+      return [];
     }
   };
 
   // Филтриране по дата
   const handleDateFilter = (dates) => {
     setDateRange(dates || []);
-    if (userData) {
-      getAllStornos(userData);
-    }
+    // Fetch with explicit range to avoid stale state
+    const run = async () => {
+      try {
+        dispatch({ type: "SHOW_LOADING" });
+        const params = {};
+        if (dates && dates.length === 2) {
+          params.startDate = dates[0].toISOString();
+          params.endDate = dates[1].toISOString();
+        }
+        if (userData) {
+          params.userId = userData.userId;
+          params.role = userData.role;
+        }
+        const { data } = await axios.get("/api/stornos/get-stornos", { params });
+        setStornos(data);
+      } catch (e) {
+        message.error("Грешка при филтриране");
+      } finally {
+        dispatch({ type: "HIDE_LOADING" });
+      }
+    };
+    run();
   };
 
   // Отваряне на детайлите за сторно операцията
@@ -175,9 +190,9 @@ const StornoListPage = () => {
       render: (id) => <span>{id.toString().substring(18, 24)}</span>
     },
     {
-      title: "Клиент",
-      dataIndex: "customerName",
-      render: (name) => <span>{name || "Няма данни"}</span>
+      title: "Маса / клиент",
+      key: "customer",
+      render: (_, r) => <span>{r.tableName || r.customerName || "—"}</span>
     },
     {
       title: "Причина",
@@ -229,7 +244,7 @@ const StornoListPage = () => {
       <div className="d-flex justify-content-between mb-3">
         <Title level={3}>Сторно операции</Title>
         <div>
-          <Button type="primary" onClick={() => navigate("/storno")} style={{ marginRight: '8px' }}>
+          <Button type="primary" onClick={() => navigate("/bills")} style={{ marginRight: "8px" }}>
             Ново сторно
           </Button>
           <Button type="default" onClick={() => navigate("/storno-report")}>

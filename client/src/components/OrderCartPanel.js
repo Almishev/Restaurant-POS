@@ -1,12 +1,12 @@
 import React from "react";
 import { Table, Button, Tabs } from "antd";
-import { DeleteOutlined } from "@ant-design/icons";
+import { DeleteOutlined, EditOutlined } from "@ant-design/icons";
 import { formatPrice } from "../utils/formatPrice";
 
 const qtyBtnStyle = {
-  minWidth: 44,
-  height: 44,
-  fontSize: 20,
+  minWidth: 40,
+  height: 40,
+  fontSize: 18,
   borderRadius: 8,
   padding: 0,
 };
@@ -24,6 +24,8 @@ const OrderCartPanel = ({
   grandTotal,
   onChangeQuantity,
   onRemove,
+  onEditNote,
+  onStornoSent,
   onSendToKitchen,
   onGenerateBill,
   getSentStatus,
@@ -36,38 +38,51 @@ const OrderCartPanel = ({
       ) : (
         pendingItems.map((item) => (
           <div key={item._id} className="cart-item-card" data-row-key={item._id}>
-            <div className="cart-item-top">
-              <div>
+            <div className="cart-item-row">
+              <div className="cart-item-info">
                 <div className="cart-item-name">{item.name}</div>
-                <div>{formatPrice(item.price)}</div>
-                {item.note ? <div style={{ color: "#ff4d4f", marginTop: 4 }}>{item.note}</div> : null}
+                <div className="cart-item-price">{formatPrice(item.price)}</div>
               </div>
-              <Button
-                danger
-                icon={<DeleteOutlined />}
-                onClick={() => onRemove(item)}
-                style={{ minWidth: 44, height: 44 }}
-              />
+              <div className="cart-qty-row">
+                <Button
+                  className="cart-qty-btn"
+                  style={qtyBtnStyle}
+                  onClick={() => onChangeQuantity(item, -1)}
+                  disabled={item.quantity <= 1}
+                >
+                  −
+                </Button>
+                <span className="cart-qty-value">{item.quantity}</span>
+                <Button
+                  type="primary"
+                  className="cart-qty-btn"
+                  style={qtyBtnStyle}
+                  onClick={() => onChangeQuantity(item, 1)}
+                >
+                  +
+                </Button>
+              </div>
+              <div className="cart-item-actions">
+                <Button
+                  icon={<EditOutlined />}
+                  title="Забележка"
+                  aria-label="Забележка"
+                  onClick={() => onEditNote?.(item)}
+                  style={{ minWidth: 40, height: 40 }}
+                />
+                <Button
+                  danger
+                  icon={<DeleteOutlined />}
+                  title="Изтрий"
+                  aria-label="Изтрий"
+                  onClick={() => onRemove(item)}
+                  style={{ minWidth: 40, height: 40 }}
+                />
+              </div>
             </div>
-            <div className="cart-qty-row">
-              <Button
-                className="cart-qty-btn"
-                style={qtyBtnStyle}
-                onClick={() => onChangeQuantity(item, -1)}
-                disabled={item.quantity <= 1}
-              >
-                −
-              </Button>
-              <span className="cart-qty-value">{item.quantity}</span>
-              <Button
-                type="primary"
-                className="cart-qty-btn"
-                style={qtyBtnStyle}
-                onClick={() => onChangeQuantity(item, 1)}
-              >
-                +
-              </Button>
-            </div>
+            {item.note ? (
+              <div className="cart-item-note">{item.note}</div>
+            ) : null}
           </div>
         ))
       )}
@@ -79,19 +94,31 @@ const OrderCartPanel = ({
       {cartItems.length === 0 ? (
         <div style={{ color: "#888", padding: 16, textAlign: "center" }}>Няма изпратени артикули</div>
       ) : (
-        cartItems.map((item) => (
-          <div key={item._id} className="cart-item-card" style={{ background: "#f3f3f3" }}>
-            <div className="cart-item-top">
-              <div>
-                <div className="cart-item-name">{item.name}</div>
+        cartItems.map((item) => {
+          const canStorno = item.status !== "Готово";
+          return (
+            <div key={item._id} className="cart-item-card" style={{ background: "#f3f3f3" }}>
+              <div className="cart-item-top">
                 <div>
-                  {formatPrice(item.price)} × {item.quantity}
+                  <div className="cart-item-name">{item.name}</div>
+                  <div>
+                    {formatPrice(item.price)} × {item.quantity}
+                  </div>
+                </div>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
+                  {getSentStatus(item)}
+                  {canStorno ? (
+                    <Button danger size="small" onClick={() => onStornoSent?.(item)}>
+                      Сторно
+                    </Button>
+                  ) : (
+                    <span style={{ fontSize: 12, color: "#888" }}>Издадено — без сторно</span>
+                  )}
                 </div>
               </div>
-              <div>{getSentStatus(item)}</div>
             </div>
-          </div>
-        ))
+          );
+        })
       )}
     </div>
   );
@@ -117,7 +144,17 @@ const OrderCartPanel = ({
     {
       title: "Забележка",
       dataIndex: "note",
-      render: (note) => (note ? <span style={{ color: "#ff4d4f" }}>{note}</span> : "-"),
+      render: (note, record) => (
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {note ? <span style={{ color: "#ff4d4f" }}>{note}</span> : <span style={{ color: "#999" }}>-</span>}
+          <Button
+            size="small"
+            icon={<EditOutlined />}
+            title="Забележка"
+            onClick={() => onEditNote?.(record)}
+          />
+        </div>
+      ),
     },
     {
       title: "Действие",
@@ -138,6 +175,18 @@ const OrderCartPanel = ({
     { title: "Цена", dataIndex: "price", render: (price) => formatPrice(price) },
     { title: "Количество", dataIndex: "quantity" },
     { title: "Статус", render: (_, record) => getSentStatus(record) },
+    {
+      title: "Действие",
+      key: "storno",
+      render: (_, record) =>
+        record.status === "Готово" ? (
+          <span style={{ color: "#888", fontSize: 12 }}>Издадено</span>
+        ) : (
+          <Button danger size="small" onClick={() => onStornoSent?.(record)}>
+            Сторно
+          </Button>
+        ),
+    },
   ];
 
   return (
@@ -148,7 +197,10 @@ const OrderCartPanel = ({
 
       <div style={{ flex: "1 1 auto", minHeight: 0, overflow: isMobile ? "visible" : "hidden" }}>
         <Tabs activeKey={cartTab} onChange={setCartTab} size="small" className="order-cart-tabs">
-          <Tabs.TabPane tab={`Текуща поръчка (${pendingItems.length})`} key="pending">
+          <Tabs.TabPane
+            tab={`Текуща поръчка (${pendingItems.reduce((s, i) => s + (Number(i.quantity) || 0), 0)})`}
+            key="pending"
+          >
             <div
               ref={!isMobile ? pendingScrollRef : undefined}
               style={isMobile ? undefined : { maxHeight: "calc(100vh - 360px)", overflowY: "auto" }}
@@ -168,7 +220,10 @@ const OrderCartPanel = ({
               )}
             </div>
           </Tabs.TabPane>
-          <Tabs.TabPane tab={`Изпратени (${cartItems.length})`} key="sent">
+          <Tabs.TabPane
+            tab={`Изпратени (${cartItems.reduce((s, i) => s + (Number(i.quantity) || 0), 0)})`}
+            key="sent"
+          >
             <div style={isMobile ? undefined : { maxHeight: "calc(100vh - 360px)", overflowY: "auto" }}>
               {isMobile ? (
                 sentCards
