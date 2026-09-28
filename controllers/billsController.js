@@ -250,6 +250,49 @@ const getZReportsController = async (req, res) => {
   }
 };
 
+// Z отчет по ID
+const getZReportByIdController = async (req, res) => {
+  try {
+    const report = await Report.findById(req.params.id);
+    if (!report) {
+      return res.status(404).json({ message: "Z отчетът не е намерен!" });
+    }
+    res.json(report);
+  } catch (error) {
+    res.status(500).json({ message: "Грешка при зареждане на Z отчета!", error: error.message });
+  }
+};
+
+// Несинхронизирани Z отчети (за client cron)
+const getUnsynchronizedReportsController = async (req, res) => {
+  try {
+    const reports = await Report.find({
+      type: "Z",
+      isSynchronized: false,
+      createdAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+    }).sort({ createdAt: -1 });
+    res.json(reports);
+  } catch (error) {
+    res.status(500).json({
+      message: "Грешка при зареждане на несинхронизирани отчети!",
+      error: error.message,
+    });
+  }
+};
+
+// Проверка за нов Z отчет (тестов/фискален stub)
+const checkZReportController = async (req, res) => {
+  try {
+    const report = await fiscalService.checkForNewZReport();
+    res.json(report);
+  } catch (error) {
+    res.status(500).json({
+      message: "Грешка при проверка за нов Z отчет!",
+      error: error.message,
+    });
+  }
+};
+
 // Ръчна синхронизация на Z отчет
 const syncZReportController = async (req, res) => {
   try {
@@ -284,6 +327,9 @@ module.exports = {
   getReportController,
   createZReportController,
   getZReportsController,
+  getZReportByIdController,
+  getUnsynchronizedReportsController,
+  checkZReportController,
   syncZReportController,
   getBillByIdController,
 };

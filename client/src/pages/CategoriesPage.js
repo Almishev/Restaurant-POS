@@ -49,7 +49,9 @@ const CategoriesPage = () => {
       form.resetFields();
       fetchCategories();
     } catch (error) {
-      message.error("Грешка при добавяне/редакция на категория!");
+      message.error(
+        error.response?.data?.message || "Грешка при добавяне/редакция на категория!"
+      );
     }
   };
 
@@ -65,7 +67,9 @@ const CategoriesPage = () => {
       message.success("Категорията е изтрита успешно!");
       fetchCategories();
     } catch (error) {
-      message.error("Грешка при изтриване на категория!");
+      message.error(
+        error.response?.data?.message || "Грешка при изтриване на категория!"
+      );
     }
   };
 

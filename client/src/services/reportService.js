@@ -9,11 +9,11 @@ export const reportService = {
     return response.data;
   },
   async getReportById(id) {
-    const response = await axios.get(`${API_URL}/reports/${id}`);
+    const response = await axios.get(`${API_URL}/bills/z-reports/${id}`);
     return response.data;
   },
   async synchronizeReport(id) {
-    const response = await axios.post(`${API_URL}/reports/${id}/synchronize`);
+    const response = await axios.post(`${API_URL}/bills/sync-z-report/${id}`);
     return response.data;
   }
-}; 
+};

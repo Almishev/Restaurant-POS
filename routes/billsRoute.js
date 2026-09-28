@@ -5,8 +5,11 @@ const {
   getReportController,
   createZReportController,
   getZReportsController,
+  getZReportByIdController,
+  getUnsynchronizedReportsController,
+  checkZReportController,
   syncZReportController,
-  getBillByIdController
+  getBillByIdController,
 } = require("./../controllers/billsController");
 
 const router = express.Router();
@@ -29,6 +32,10 @@ router.get("/get-report", getReportController);
 router.post("/create-z-report", createZReportController);
 
 router.get("/z-reports", getZReportsController);
+router.get("/z-reports/:id", getZReportByIdController);
+
+router.get("/unsynchronized-reports", getUnsynchronizedReportsController);
+router.get("/check-z-report", checkZReportController);
 
 // Синхронизация на Z отчет
 router.post("/sync-z-report/:reportId", syncZReportController);
