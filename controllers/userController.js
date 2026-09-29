@@ -1,15 +1,31 @@
 const userModal = require("../models/userModel");
+const licenseService = require("../services/licenseService");
 
 // login user
 const loginController = async (req, res) => {
   try {
+    const license = await licenseService.verify();
+    if (!license.active) {
+      return res.status(403).json({
+        message: license.message || "Абонаментът не е валиден.",
+        reason: license.reason || "license_inactive",
+        valid_until: license.valid_until || null,
+        shop_name: license.shop_name || null,
+      });
+    }
+
     const { userId, password } = req.body;
     const user = await userModal.findOne({ userId, password, verified: true });
     if (user) {
       res.status(200).json({
         name: user.name,
         userId: user.userId,
-        role: user.role
+        role: user.role,
+        license: {
+          shop_name: license.shop_name || null,
+          valid_until: license.valid_until || null,
+          offline: Boolean(license.offline),
+        },
       });
     } else {
       res.status(400).json({

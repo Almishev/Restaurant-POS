@@ -24,10 +24,19 @@ const Login = () => {
       message.success("Успешно влизане");
       localStorage.setItem("auth", JSON.stringify(res.data));
       localStorage.removeItem("selectedTable");
+      if (res.data?.license?.offline) {
+        message.warning("Офлайн лиценз (последна успешна проверка)");
+      }
       redirectByRole(res.data);
     } catch (error) {
       dispatch({ type: "HIDE_LOADING" });
-      message.error("Възникна грешка");
+      const status = error?.response?.status;
+      const msg =
+        error?.response?.data?.message ||
+        (status === 403
+          ? "Абонаментът не е валиден"
+          : "Възникна грешка при вход");
+      message.error(msg);
       console.log(error);
     }
   };

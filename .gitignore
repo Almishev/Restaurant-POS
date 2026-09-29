@@ -13,6 +13,9 @@ yarn-error.log*
 .env.*
 !.env.example
 
+# License offline cache
+data/license-cache.json
+
 # Build output
 build/
 dist/
