@@ -263,8 +263,8 @@
     flex-direction: column;
     flex: 1;
     min-height: 0;
-    height: calc(100vh - 200px);
-    max-height: calc(100vh - 180px);
+    height: calc(100vh - 280px);
+    max-height: calc(100vh - 250px);
   }
 
   .order-mobile-split {

@@ -63,6 +63,68 @@
   font-weight: bold;
 }
 
+.mobile-tabbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 100;
+  display: flex;
+  align-items: stretch;
+  gap: 6px;
+  padding: 8px 8px calc(8px + env(safe-area-inset-bottom));
+  background: #fff;
+  border-top: 1px solid #efe6f0;
+  box-shadow: 0 -6px 18px rgba(40, 16, 48, 0.06);
+}
+
+.mobile-tabbar-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 58px;
+  border: none;
+  background: transparent;
+  color: #8a7594;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.15;
+  text-align: center;
+  border-radius: 16px;
+  padding: 6px 2px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.mobile-tabbar-item.active {
+  background: #003366;
+  color: #fff;
+}
+
+.mobile-tabbar-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.mobile-tabbar .anticon,
+.mobile-tabbar .anticon svg {
+  margin: 0 !important;
+  width: 22px;
+  height: 22px;
+  font-size: 22px;
+}
+
+@media (max-width: 768px) {
+  .site-layout.has-mobile-nav .ant-layout-content {
+    padding-bottom: calc(96px + env(safe-area-inset-bottom)) !important;
+  }
+}
+
 @media (max-width: 768px) {
   .site-layout .site-layout-background {
     margin: 2px !important;

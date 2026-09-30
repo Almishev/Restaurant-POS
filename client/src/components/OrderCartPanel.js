@@ -25,7 +25,6 @@ const OrderCartPanel = ({
   onChangeQuantity,
   onRemove,
   onEditNote,
-  onStornoSent,
   onSendToKitchen,
   onGenerateBill,
   getSentStatus,
@@ -94,31 +93,21 @@ const OrderCartPanel = ({
       {cartItems.length === 0 ? (
         <div style={{ color: "#888", padding: 16, textAlign: "center" }}>Няма изпратени артикули</div>
       ) : (
-        cartItems.map((item) => {
-          const canStorno = item.status !== "Готово";
-          return (
-            <div key={item._id} className="cart-item-card" style={{ background: "#f3f3f3" }}>
-              <div className="cart-item-top">
+        cartItems.map((item) => (
+          <div key={item._id} className="cart-item-card" style={{ background: "#f3f3f3" }}>
+            <div className="cart-item-top">
+              <div>
+                <div className="cart-item-name">{item.name}</div>
                 <div>
-                  <div className="cart-item-name">{item.name}</div>
-                  <div>
-                    {formatPrice(item.price)} × {item.quantity}
-                  </div>
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
-                  {getSentStatus(item)}
-                  {canStorno ? (
-                    <Button danger size="small" onClick={() => onStornoSent?.(item)}>
-                      Сторно
-                    </Button>
-                  ) : (
-                    <span style={{ fontSize: 12, color: "#888" }}>Издадено — без сторно</span>
-                  )}
+                  {formatPrice(item.price)} × {item.quantity}
                 </div>
               </div>
+              <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 8 }}>
+                {getSentStatus(item)}
+              </div>
             </div>
-          );
-        })
+          </div>
+        ))
       )}
     </div>
   );
@@ -170,23 +159,15 @@ const OrderCartPanel = ({
     },
   ];
 
+  const pendingCount = pendingItems.reduce((s, i) => s + (Number(i.quantity) || 0), 0);
+  const sentCount = cartItems.reduce((s, i) => s + (Number(i.quantity) || 0), 0);
+  const activeCartTab = pendingCount > 0 ? cartTab : "sent";
+
   const sentColumns = [
     { title: "Име", dataIndex: "name" },
     { title: "Цена", dataIndex: "price", render: (price) => formatPrice(price) },
     { title: "Количество", dataIndex: "quantity" },
     { title: "Статус", render: (_, record) => getSentStatus(record) },
-    {
-      title: "Действие",
-      key: "storno",
-      render: (_, record) =>
-        record.status === "Готово" ? (
-          <span style={{ color: "#888", fontSize: 12 }}>Издадено</span>
-        ) : (
-          <Button danger size="small" onClick={() => onStornoSent?.(record)}>
-            Сторно
-          </Button>
-        ),
-    },
   ];
 
   return (
@@ -196,9 +177,10 @@ const OrderCartPanel = ({
       </h3>
 
       <div style={{ flex: "1 1 auto", minHeight: 0, overflow: isMobile ? "visible" : "hidden" }}>
-        <Tabs activeKey={cartTab} onChange={setCartTab} size="small" className="order-cart-tabs">
+        <Tabs activeKey={activeCartTab} onChange={setCartTab} size="small" className="order-cart-tabs">
+          {pendingCount > 0 ? (
           <Tabs.TabPane
-            tab={`Текуща поръчка (${pendingItems.reduce((s, i) => s + (Number(i.quantity) || 0), 0)})`}
+            tab={`Текуща поръчка (${pendingCount})`}
             key="pending"
           >
             <div
@@ -220,8 +202,9 @@ const OrderCartPanel = ({
               )}
             </div>
           </Tabs.TabPane>
+          ) : null}
           <Tabs.TabPane
-            tab={`Изпратени (${cartItems.reduce((s, i) => s + (Number(i.quantity) || 0), 0)})`}
+            tab={`Изпратени (${sentCount})`}
             key="sent"
           >
             <div style={isMobile ? undefined : { maxHeight: "calc(100vh - 360px)", overflowY: "auto" }}>
@@ -249,17 +232,18 @@ const OrderCartPanel = ({
           <h2 style={{ margin: 0, color: "#003366" }}>Общо: {formatPrice(grandTotal)}</h2>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {cartTab === "pending" && pendingItems.length > 0 ? (
             <Button
-            type="default"
-            block
-            size="large"
-            className="btn-mark-order"
-            style={{ background: "#A3A7D2", borderRadius: 10, flex: 1, minWidth: 120, fontWeight: 600, minHeight: 48, color: "#003366", borderColor: "#A3A7D2" }}
-            onClick={onSendToKitchen}
-            disabled={pendingItems.length === 0}
-          >
-            Маркирай поръчката
-          </Button>
+              type="default"
+              block
+              size="large"
+              className="btn-mark-order"
+              style={{ background: "#A3A7D2", borderRadius: 10, flex: 1, minWidth: 120, fontWeight: 600, minHeight: 48, color: "#003366", borderColor: "#A3A7D2" }}
+              onClick={onSendToKitchen}
+            >
+              Маркирай
+            </Button>
+          ) : null}
           <Button
             type="primary"
             block

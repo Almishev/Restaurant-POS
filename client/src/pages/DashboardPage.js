@@ -74,6 +74,11 @@ const DashboardPage = () => {
             <Statistic title="Карта" value={data?.byPayment?.card || 0} precision={2} suffix="€" />
           </Card>
         </Col>
+        <Col xs={12} md={6}>
+          <Card loading={loading}>
+            <Statistic title="На стая" value={data?.byPayment?.room || 0} precision={2} suffix="€" />
+          </Card>
+        </Col>
       </Row>
       <Card title="Топ артикули днес" style={{ marginTop: 24 }} loading={loading}>
         <Table

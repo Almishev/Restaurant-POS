@@ -26,6 +26,9 @@ services:
       HOST: "0.0.0.0"
       MONGO_URI: mongodb://mongo:27017/restaurant-pos
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      HOTEL_PMS_URL: ${HOTEL_PMS_URL:-http://host.docker.internal:8085}
+      HOTEL_PMS_API_KEY: ${HOTEL_PMS_API_KEY:-}
+      HOTEL_PMS_TIMEOUT_MS: ${HOTEL_PMS_TIMEOUT_MS:-15000}
     depends_on:
       - mongo
 

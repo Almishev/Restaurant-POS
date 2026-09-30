@@ -360,7 +360,7 @@ const StornoListPage = () => {
                     <Descriptions.Item label="Дата на създаване">{new Date(originalBill.createdAt || originalBill.date).toLocaleString()}</Descriptions.Item>
                     <Descriptions.Item label="Клиент">{originalBill.customerName || "Няма данни"}</Descriptions.Item>
                     <Descriptions.Item label="Обща сума">{originalBill.totalAmount.toFixed(2)} €</Descriptions.Item>
-                    <Descriptions.Item label="Начин на плащане">{originalBill.paymentMode === 'cash' ? 'В брой' : originalBill.paymentMode === 'card' ? 'Карта' : originalBill.paymentMode}</Descriptions.Item>
+                    <Descriptions.Item label="Начин на плащане">{originalBill.paymentMode === 'cash' || originalBill.paymentMode === 'Брой' ? 'В брой' : originalBill.paymentMode === 'card' || originalBill.paymentMode === 'Карта' ? 'Карта' : originalBill.paymentMode === 'room' || originalBill.paymentMode === 'На стая' ? `На стая${originalBill.hotelRoomNumber ? ` ${originalBill.hotelRoomNumber}` : ''}` : originalBill.paymentMode}</Descriptions.Item>
                   </Descriptions>
                 ) : (
                   <Text type="secondary">Оригиналният бон не е намерен или е изтрит.</Text>

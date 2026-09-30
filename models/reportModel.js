@@ -11,6 +11,8 @@ const reportSchema = new mongoose.Schema(
     byPayment: { type: Object }, // { cash: 100, card: 200 }
     items: { type: Object },     // { "Капрезе": { quantity: 2, total: 18 }, ... }
     bills: { type: Array },      // по желание: всички сметки, включени в отчета
+    roomAmount: { type: Number, default: 0 },
+    roomBillCount: { type: Number, default: 0 },
     // Ново: полета за фискална интеграция
     fiscalReportId: { type: String },
     isSynchronized: { type: Boolean, default: false },

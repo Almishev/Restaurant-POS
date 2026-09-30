@@ -104,6 +104,7 @@ const ReportsPage = () => {
       ["Брой сметки", report.totalBills],
       ["Брой", report.byPayment?.cash || 0],
       ["Карта", report.byPayment?.card || 0],
+      ["На стая", (isZ || report.type === "Z" ? report.roomAmount : report.byPayment?.room) || 0],
       [],
       ["Артикул", "Брой", "Оборот"],
       ...Object.entries(report.items || {}).map(([name, v]) => [name, v.quantity, v.total]),
@@ -208,6 +209,16 @@ const ReportsPage = () => {
               </Col>
               <Col>
                 <Statistic title="Карта" value={Number(report.byPayment?.card) || 0} precision={2} suffix="€" />
+              </Col>
+              <Col>
+                <Statistic
+                  title={isZ || report.type === "Z" ? "На стая (извън Z)" : "На стая"}
+                  value={
+                    Number(isZ || report.type === "Z" ? report.roomAmount : report.byPayment?.room) || 0
+                  }
+                  precision={2}
+                  suffix="€"
+                />
               </Col>
             </Row>
             <Card title="Разбивка по артикули" style={{ marginBottom: 24 }}>

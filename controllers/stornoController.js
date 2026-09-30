@@ -1,12 +1,26 @@
 const Storno = require("../models/stornoModel");
 const Bills = require("../models/billsModel");
 const fiscalService = require("../services/fiscalService");
+const hotelPmsService = require("../services/hotelPmsService");
 const Report = require("../models/reportModel");
 const Recipe = require("../models/recipeModel");
 const Inventory = require("../models/inventoryModel");
+const crypto = require("crypto");
+const { isRoomCharge } = require("../utils/buildSalesReport");
 
 function lineKey(item) {
   return String(item._id || item.itemId || item.name);
+}
+
+function roomStornoKey(bill, items, amount) {
+  const parts = (items || [])
+    .map((item) => `${String(item._id || item.name)}:${Number(item.quantity) || 0}`)
+    .sort()
+    .join("|");
+  return crypto
+    .createHash("sha256")
+    .update(`${bill._id}|${Number(amount).toFixed(2)}|${parts}`)
+    .digest("hex");
 }
 
 function getRemainingQty(bill, item) {
@@ -166,12 +180,12 @@ const createStornoController = async (req, res) => {
 
     const newStorno = await stornoBill.save();
 
-    // Update stornoed quantities on bill
-    const stornoedMap = originalBill.stornoedQuantities
+    const previousMap = originalBill.stornoedQuantities
       ? originalBill.stornoedQuantities instanceof Map
         ? Object.fromEntries(originalBill.stornoedQuantities)
         : { ...originalBill.stornoedQuantities }
       : {};
+    const stornoedMap = { ...previousMap };
 
     validatedItems.forEach((item) => {
       const key = lineKey(item);
@@ -193,6 +207,38 @@ const createStornoController = async (req, res) => {
       originalBill.isStornoed = true;
     }
     await originalBill.save();
+
+    if (isRoomCharge(originalBill.paymentMode)) {
+      try {
+        await hotelPmsService.stornoRoomCharge(
+          String(originalBill._id),
+          totalAmount,
+          roomStornoKey(originalBill, validatedItems, totalAmount)
+        );
+      } catch (hotelErr) {
+        originalBill.stornoedQuantities = previousMap;
+        originalBill.isStornoed = false;
+        await originalBill.save();
+        await Storno.findByIdAndDelete(newStorno._id);
+        return res.status(hotelErr.status || 502).json({
+          error: hotelErr.message || "Хотелът отказа сторното",
+        });
+      }
+
+      try {
+        await restoreInventoryForItems(validatedItems, userId);
+      } catch (invErr) {
+        console.log("[STORNO] Inventory restore error:", invErr);
+      }
+      newStorno.fiscalStatus = "n/a";
+      await newStorno.save();
+      return res.status(201).json({
+        success: true,
+        stornoId: newStorno._id,
+        message: "Сторното е свалено от стаята",
+        isFullStorno: fullyStornoed,
+      });
+    }
 
     // Restore inventory
     try {

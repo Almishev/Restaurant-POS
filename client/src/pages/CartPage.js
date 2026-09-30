@@ -15,6 +15,11 @@ import { formatPrice } from "../utils/formatPrice";
 const CartPage = () => {
   const [subTotal, setSubTotal] = useState(0);
   const [billPopup, setBillPopup] = useState(false);
+  const [openRooms, setOpenRooms] = useState([]);
+  const [roomsLoading, setRoomsLoading] = useState(false);
+  const [roomsError, setRoomsError] = useState("");
+  const [form] = Form.useForm();
+  const paymentMode = Form.useWatch("paymentMode", form);
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { cartItems } = useSelector((state) => state.rootReducer);
@@ -91,6 +96,32 @@ const CartPage = () => {
     }
   }, []);
 
+  useEffect(() => {
+    if (!billPopup || paymentMode !== "На стая") return undefined;
+    let cancelled = false;
+    setRoomsLoading(true);
+    setRoomsError("");
+    axios
+      .get("/api/bills/open-rooms")
+      .then((res) => {
+        if (!cancelled) setOpenRooms(Array.isArray(res.data) ? res.data : []);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setOpenRooms([]);
+          const text = error.response?.data?.message || "Хотелът не е свързан";
+          setRoomsError(text);
+          message.error(text);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setRoomsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [billPopup, paymentMode]);
+
   //handleSubmit
   const handleSubmit = async (value) => {
     try {
@@ -100,13 +131,30 @@ const CartPage = () => {
         cartItems,
         subTotal,
         totalAmount: Number(subTotal),
-        userId: userData.userId, // Използваме userId от auth данните
+        userId: userData.userId,
+        tableName: selectedTableName,
+        customerName: selectedTableName,
       };
+      if (value.paymentMode === "На стая") {
+        const room = openRooms.find((item) => String(item.bookingId) === String(value.hotelBookingId));
+        if (!room) {
+          message.error("Изберете стая");
+          return;
+        }
+        newObject.paymentMode = "На стая";
+        newObject.hotelBookingId = room.bookingId;
+        newObject.hotelRoomNumber = room.roomNumber;
+        newObject.hotelGuestName = room.guestName;
+      }
       await axios.post("/api/bills/add-bills", newObject);
-      message.success("Сметката е генерирана");
+      message.success(
+        value.paymentMode === "На стая"
+          ? `Сметката е качена на стая ${newObject.hotelRoomNumber}`
+          : "Сметката е генерирана"
+      );
       navigate("/bills");
     } catch (error) {
-      message.error("Нещо се обърка!");
+      message.error(error.response?.data?.message || error.response?.data?.error || "Нещо се обърка!");
       console.log(error);
     }
   };
@@ -159,13 +207,38 @@ const CartPage = () => {
         onCancel={() => setBillPopup(false)}
         footer={false}
       >
-        <Form layout="vertical" onFinish={handleSubmit}>
-          <Form.Item name="paymentMode" label="Метод на плащане" style={{ minWidth: 220 }}>
+        <Form form={form} layout="vertical" onFinish={handleSubmit}>
+          <Form.Item name="paymentMode" label="Метод на плащане" style={{ minWidth: 220 }} rules={[{ required: true, message: "Изберете метод на плащане" }]}>
             <Select style={{ minWidth: 220 }}>
               <Select.Option value="cash">Брой</Select.Option>
               <Select.Option value="card">Карта</Select.Option>
+              <Select.Option value="На стая">На стая</Select.Option>
             </Select>
           </Form.Item>
+          {paymentMode === "На стая" && (
+            <Form.Item name="hotelBookingId" label="Стая" rules={[{ required: true, message: "Изберете стая" }]}>
+              <Select
+                style={{ minWidth: 220 }}
+                loading={roomsLoading}
+                placeholder={roomsError ? "Стайте не се заредиха" : openRooms.length ? "Номер или име" : "Няма настанени стаи"}
+                showSearch
+                optionFilterProp="label"
+                onSearch={(text) => {
+                  const match = openRooms.find(
+                    (room) => String(room.roomNumber).toLowerCase() === String(text || "").trim().toLowerCase()
+                  );
+                  if (match) form.setFieldsValue({ hotelBookingId: match.bookingId });
+                }}
+              >
+                {openRooms.map((room) => (
+                  <Select.Option key={room.bookingId} value={room.bookingId} label={`${room.roomNumber} ${room.guestName}`}>
+                    {`Стая ${room.roomNumber} — ${room.guestName}`}
+                  </Select.Option>
+                ))}
+              </Select>
+              {roomsError && <div style={{ color: "#cf1322", marginTop: 6 }}>{roomsError}</div>}
+            </Form.Item>
+          )}
           <div className="bill-it">
             <h5>
               Сума : <b>{formatPrice(subTotal)}</b>
@@ -177,7 +250,7 @@ const CartPage = () => {
           </div>
           <div className="d-flex justify-content-end">
             <Button type="primary" htmlType="submit">
-              Генерирай сметка
+              {paymentMode === "На стая" ? "Качи на стаята" : "Генерирай сметка"}
             </Button>
           </div>
         </Form>

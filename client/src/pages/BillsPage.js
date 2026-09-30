@@ -184,8 +184,17 @@ const BillsPage = () => {
     {
       title: "Плащане",
       dataIndex: "paymentMode",
-      render: (v) =>
-        v === "cash" || v === "Брой" ? "Брой" : v === "card" || v === "Карта" ? "Карта" : v,
+      render: (v, record) => {
+        const label =
+          v === "cash" || v === "Брой"
+            ? "Брой"
+            : v === "card" || v === "Карта"
+            ? "Карта"
+            : v === "room" || v === "На стая"
+            ? "На стая"
+            : v;
+        return record.hotelRoomNumber ? `${label} ${record.hotelRoomNumber}` : label;
+      },
     },
     { title: "Обща сума", dataIndex: "totalAmount", render: (v) => formatPrice(v) },
     {
@@ -267,6 +276,7 @@ const BillsPage = () => {
           options={[
             { value: "cash", label: "Брой" },
             { value: "card", label: "Карта" },
+            { value: "room", label: "На стая" },
           ]}
         />
         <Input
@@ -349,6 +359,8 @@ const BillsPage = () => {
                       : selectedBill.paymentMode === "card" ||
                         selectedBill.paymentMode === "Карта"
                       ? "Карта"
+                      : selectedBill.paymentMode === "room" || selectedBill.paymentMode === "На стая"
+                      ? `На стая${selectedBill.hotelRoomNumber ? ` ${selectedBill.hotelRoomNumber}` : ""}`
                       : selectedBill.paymentMode || "-"}
                   </b>
                   <br />

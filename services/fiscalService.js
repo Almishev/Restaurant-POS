@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const Report = require('../models/reportModel');
+const { isRoomCharge } = require('../utils/buildSalesReport');
 
 /**
  * ErpNet.FP integration (http://localhost:8001 by default).
@@ -268,6 +269,9 @@ class FiscalService {
    * Print fiscal receipt for a closed bill.
    */
   async printReceipt(bill) {
+    if (isRoomCharge(bill.paymentMode)) {
+      throw new Error("Сметка към стая не се фискализира в ресторанта");
+    }
     const cartItems = bill.cartItems || [];
     const totalAmount = Number(bill.totalAmount) || 0;
     const paymentType = this.mapPaymentType(bill.paymentMode);
@@ -330,6 +334,9 @@ class FiscalService {
   }
 
   async printStornoBon(originalBill, stornoId, reason, cartItems) {
+    if (isRoomCharge(originalBill.paymentMode)) {
+      throw new Error("Сторно към стая не се фискализира в ресторанта");
+    }
     try {
       const items = this.buildSaleItems(cartItems);
       const totalAmount = items

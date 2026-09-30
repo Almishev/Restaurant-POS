@@ -27,6 +27,12 @@ const TablesPage = () => {
     fetchTables();
   }, []);
 
+  useEffect(() => {
+    const refresh = () => fetchTables();
+    window.addEventListener("pos-tables-changed", refresh);
+    return () => window.removeEventListener("pos-tables-changed", refresh);
+  }, []);
+
   const user = localStorage.getItem("auth") ? JSON.parse(localStorage.getItem("auth")) : null;
   const myTables = user ? tables.filter((t) => t.createdBy === user.userId) : [];
 

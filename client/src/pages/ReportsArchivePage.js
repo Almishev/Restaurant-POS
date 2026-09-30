@@ -283,6 +283,9 @@ const ReportsArchivePage = () => {
                 Плащане с карта: <b>{formatPrice(selectedReport.byPayment?.card || 0)}</b>
               </p>
               <p>
+                На стая (извън Z): <b>{formatPrice(selectedReport.roomAmount || 0)}</b>
+              </p>
+              <p>
                 Синхронизиран:{" "}
                 {selectedReport.isSynchronized ? (
                   <Tag color="success">Да</Tag>

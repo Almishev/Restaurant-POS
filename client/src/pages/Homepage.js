@@ -25,6 +25,9 @@ const Homepage = () => {
   const [totalAmount, setTotalAmount] = useState(0);
   const [kitchenOrders, setKitchenOrders] = useState([]);
   const [billPopup, setBillPopup] = useState(false);
+  const [openRooms, setOpenRooms] = useState([]);
+  const [roomsLoading, setRoomsLoading] = useState(false);
+  const [roomsError, setRoomsError] = useState("");
   const [transferModalVisible, setTransferModalVisible] = useState(false);
   const [transferTableModalVisible, setTransferTableModalVisible] = useState(false);
   const [renameTableModalVisible, setRenameTableModalVisible] = useState(false);
@@ -32,7 +35,9 @@ const Homepage = () => {
   const [sentStornoQty, setSentStornoQty] = useState(1);
   const [sentStornoReason, setSentStornoReason] = useState("operatorError");
   const [sentStornoLoading, setSentStornoLoading] = useState(false);
+  const [stornoPickerOpen, setStornoPickerOpen] = useState(false);
   const [form] = Form.useForm();
+  const paymentMode = Form.useWatch("paymentMode", form);
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const [isNoteModalVisible, setIsNoteModalVisible] = useState(false);
@@ -41,6 +46,7 @@ const Homepage = () => {
   const [itemToAdd, setItemToAdd] = useState(null);
   const [cartTab, setCartTab] = useState("pending");
   const [mobileView, setMobileView] = useState("menu"); // menu | cart
+  const [operationsOpen, setOperationsOpen] = useState(false);
   const [itemSearch, setItemSearch] = useState("");
   const pendingOrderScrollRef = useRef(null);
   const longPressTimerRef = useRef(null);
@@ -114,6 +120,45 @@ const Homepage = () => {
   useEffect(() => {
     if (tableId) fetchTable();
   }, [tableId, navigate, fetchTable]);
+
+  useEffect(() => {
+    const open = () => setOperationsOpen(true);
+    window.addEventListener("pos-open-operations", open);
+    return () => window.removeEventListener("pos-open-operations", open);
+  }, []);
+
+  useEffect(() => {
+    if (!table) return;
+    if (sessionStorage.getItem("pos-open-operations") !== "1") return;
+    sessionStorage.removeItem("pos-open-operations");
+    setOperationsOpen(true);
+  }, [table]);
+
+  useEffect(() => {
+    if (!billPopup || paymentMode !== "На стая") return undefined;
+    let cancelled = false;
+    setRoomsLoading(true);
+    setRoomsError("");
+    axios
+      .get("/api/bills/open-rooms")
+      .then((res) => {
+        if (!cancelled) setOpenRooms(Array.isArray(res.data) ? res.data : []);
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setOpenRooms([]);
+          const text = error.response?.data?.message || "Хотелът не е свързан";
+          setRoomsError(text);
+          message.error(text);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setRoomsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [billPopup, paymentMode]);
   // Fetch categories
   const fetchCategories = useCallback(async () => {
     try {
@@ -421,9 +466,24 @@ const Homepage = () => {
         totalAmount: Number(total),
         userId: userId,
       };
+      if (value.paymentMode === "На стая") {
+        const room = openRooms.find((item) => String(item.bookingId) === String(value.hotelBookingId));
+        if (!room) {
+          message.error("Изберете стая");
+          return;
+        }
+        newObject.paymentMode = "На стая";
+        newObject.hotelBookingId = room.bookingId;
+        newObject.hotelRoomNumber = room.roomNumber;
+        newObject.hotelGuestName = room.guestName;
+      }
       console.log("[DEBUG] newObject за изпращане към /api/bills/add-bills:", newObject);
       await axios.post("/api/bills/add-bills", newObject);
-      message.success("Сметката е генерирана");
+      message.success(
+        value.paymentMode === "На стая"
+          ? `Сметката е качена на стая ${newObject.hotelRoomNumber}`
+          : "Сметката е генерирана"
+      );
       setBillPopup(false);
       // Изчистване на количката за масата
       await axios.put("/api/tables/update-table-cart", {
@@ -436,7 +496,7 @@ const Homepage = () => {
       localStorage.removeItem("selectedTable");
       navigate("/tables");
     } catch (error) {
-      message.error("Нещо се обърка!");
+      message.error(error.response?.data?.message || error.response?.data?.error || "Нещо се обърка!");
       console.log(error);
     }
   };
@@ -482,20 +542,21 @@ const Homepage = () => {
       return <span style={{ color: '#888' }}>Изпратено</span>;
   };
 
+  const isSentItemIssued = (item) =>
+    item.status === "Готово" ||
+    (kitchenOrders || []).some(
+      (o) =>
+        o.tableName === table?.name &&
+        (o.items || []).some(
+          (it) =>
+            it.done &&
+            (it.name || "").toLowerCase().trim() ===
+              (item.name || "").toLowerCase().trim()
+        )
+    );
+
   const openSentStorno = (item) => {
-    const issued =
-      item.status === "Готово" ||
-      (kitchenOrders || []).some(
-        (o) =>
-          o.tableName === table?.name &&
-          (o.items || []).some(
-            (it) =>
-              it.done &&
-              (it.name || "").toLowerCase().trim() ===
-                (item.name || "").toLowerCase().trim()
-          )
-      );
-    if (issued) {
+    if (isSentItemIssued(item)) {
       message.warning(
         "Издаден артикул не може да се сторнира. Кухнята/барът трябва да натиснат „Върни“."
       );
@@ -504,6 +565,23 @@ const Homepage = () => {
     setSentStornoItem(item);
     setSentStornoQty(1);
     setSentStornoReason("operatorError");
+  };
+
+  const openStornoFromOperations = () => {
+    const eligible = cartItems.filter((item) => !isSentItemIssued(item));
+    if (eligible.length === 0) {
+      message.warning(
+        cartItems.length === 0
+          ? "Няма изпратени артикули за сторно"
+          : "Издаден артикул не може да се сторнира. Кухнята/барът трябва да натиснат „Върни“."
+      );
+      return;
+    }
+    if (eligible.length === 1) {
+      openSentStorno(eligible[0]);
+      return;
+    }
+    setStornoPickerOpen(true);
   };
 
   const submitSentStorno = async () => {
@@ -579,29 +657,52 @@ const Homepage = () => {
           <h2>
             Работиш на маса: <b>{table.name}</b>
           </h2>
+          {!isMobile && (
           <div className="toolbar-actions">
             <Dropdown
               trigger={["click"]}
+              visible={operationsOpen}
+              onVisibleChange={setOperationsOpen}
               overlay={
                 <Menu>
                   <Menu.Item
                     key="rename-table"
-                    onClick={() => setRenameTableModalVisible(true)}
+                    onClick={() => {
+                      setOperationsOpen(false);
+                      setRenameTableModalVisible(true);
+                    }}
                   >
                     Смяна на име
                   </Menu.Item>
                   <Menu.Item
                     key="transfer-items"
                     disabled={!hasTransferableItems}
-                    onClick={showTransferModal}
+                    onClick={() => {
+                      setOperationsOpen(false);
+                      showTransferModal();
+                    }}
                   >
                     Прехвърли артикули
                   </Menu.Item>
                   <Menu.Item
                     key="transfer-table"
-                    onClick={() => setTransferTableModalVisible(true)}
+                    onClick={() => {
+                      setOperationsOpen(false);
+                      setTransferTableModalVisible(true);
+                    }}
                   >
                     Прехвърли маса
+                  </Menu.Item>
+                  <Menu.Divider />
+                  <Menu.Item
+                    key="storno"
+                    disabled={cartItems.length === 0}
+                    onClick={() => {
+                      setOperationsOpen(false);
+                      openStornoFromOperations();
+                    }}
+                  >
+                    Сторно
                   </Menu.Item>
                 </Menu>
               }
@@ -615,7 +716,57 @@ const Homepage = () => {
               </a>
             </Dropdown>
           </div>
+          )}
         </div>
+
+        <Modal
+          title="Операции"
+          visible={isMobile && operationsOpen}
+          onCancel={() => setOperationsOpen(false)}
+          footer={null}
+        >
+          <Menu selectable={false}>
+            <Menu.Item
+              key="rename-table"
+              onClick={() => {
+                setOperationsOpen(false);
+                setRenameTableModalVisible(true);
+              }}
+            >
+              Смяна на име
+            </Menu.Item>
+            <Menu.Item
+              key="transfer-items"
+              disabled={!hasTransferableItems}
+              onClick={() => {
+                setOperationsOpen(false);
+                showTransferModal();
+              }}
+            >
+              Прехвърли артикули
+            </Menu.Item>
+            <Menu.Item
+              key="transfer-table"
+              onClick={() => {
+                setOperationsOpen(false);
+                setTransferTableModalVisible(true);
+              }}
+            >
+              Прехвърли маса
+            </Menu.Item>
+            <Menu.Divider />
+            <Menu.Item
+              key="storno"
+              disabled={cartItems.length === 0}
+              onClick={() => {
+                setOperationsOpen(false);
+                openStornoFromOperations();
+              }}
+            >
+              Сторно
+            </Menu.Item>
+          </Menu>
+        </Modal>
 
         {isMobile && (
           <div className="order-mobile-switch">
@@ -842,7 +993,6 @@ const Homepage = () => {
                 onChangeQuantity={handleChangeQuantity}
                 onRemove={handleRemoveFromCart}
                 onEditNote={(item) => handleAddToCartWithNote(item, { noteFocus: true })}
-                onStornoSent={openSentStorno}
                 onSendToKitchen={handleSendToKitchen}
                 onGenerateBill={handleGenerateBillClick}
                 getSentStatus={getSentStatus}
@@ -864,7 +1014,6 @@ const Homepage = () => {
             onChangeQuantity={handleChangeQuantity}
             onRemove={handleRemoveFromCart}
             onEditNote={(item) => handleAddToCartWithNote(item, { noteFocus: true })}
-            onStornoSent={openSentStorno}
             onSendToKitchen={handleSendToKitchen}
             onGenerateBill={handleGenerateBillClick}
             getSentStatus={getSentStatus}
@@ -896,8 +1045,37 @@ const Homepage = () => {
             <Select style={{ minWidth: 220 }}>
               <Select.Option value="Брой">Брой</Select.Option>
               <Select.Option value="Карта">Карта</Select.Option>
+              <Select.Option value="На стая">На стая</Select.Option>
             </Select>
           </Form.Item>
+          {paymentMode === "На стая" && (
+            <Form.Item
+              name="hotelBookingId"
+              label="Стая"
+              rules={[{ required: true, message: "Изберете стая" }]}
+            >
+              <Select
+                style={{ minWidth: 220 }}
+                loading={roomsLoading}
+                placeholder={roomsError ? "Стайте не се заредиха" : openRooms.length ? "Номер или име" : "Няма настанени стаи"}
+                showSearch
+                optionFilterProp="label"
+                onSearch={(text) => {
+                  const match = openRooms.find(
+                    (room) => String(room.roomNumber).toLowerCase() === String(text || "").trim().toLowerCase()
+                  );
+                  if (match) form.setFieldsValue({ hotelBookingId: match.bookingId });
+                }}
+              >
+                {openRooms.map((room) => (
+                  <Select.Option key={room.bookingId} value={room.bookingId} label={`${room.roomNumber} ${room.guestName}`}>
+                    {`Стая ${room.roomNumber} — ${room.guestName}`}
+                  </Select.Option>
+                ))}
+              </Select>
+              {roomsError && <div style={{ color: "#cf1322", marginTop: 6 }}>{roomsError}</div>}
+            </Form.Item>
+          )}
           <div className="bill-it">
             <h5>
               Сума : <b>{formatPrice(grandTotal)}</b>
@@ -908,7 +1086,7 @@ const Homepage = () => {
           </div>
           <div className="d-flex justify-content-end">
             <Button type="primary" htmlType="submit">
-              Генерирай сметка
+              {paymentMode === "На стая" ? "Качи на стаята" : "Генерирай сметка"}
             </Button>
           </div>
         </Form>
@@ -1005,6 +1183,33 @@ const Homepage = () => {
           autoSize={{ minRows: 3, maxRows: 6 }}
           style={{ fontSize: 18, borderRadius: 8, padding: 8 }}
         />
+      </Modal>
+      <Modal
+        title="Сторно"
+        visible={stornoPickerOpen}
+        onCancel={() => setStornoPickerOpen(false)}
+        footer={null}
+      >
+        <p style={{ marginTop: 0 }}>Изберете изпратен артикул.</p>
+        {cartItems.map((item) => {
+          const issued = isSentItemIssued(item);
+          return (
+            <Button
+              key={item._id}
+              block
+              danger={!issued}
+              disabled={issued}
+              style={{ marginBottom: 8, height: "auto", textAlign: "left", whiteSpace: "normal", padding: "10px 12px" }}
+              onClick={() => {
+                setStornoPickerOpen(false);
+                openSentStorno(item);
+              }}
+            >
+              {item.name} — {formatPrice(item.price)} × {item.quantity}
+              {issued ? " (издадено)" : ""}
+            </Button>
+          );
+        })}
       </Modal>
       {/* Pre-bill сторно на изпратен артикул */}
       <Modal

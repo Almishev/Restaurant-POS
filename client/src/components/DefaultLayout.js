@@ -2,6 +2,8 @@ import React, { useState, useEffect } from "react";
 import { useSelector } from "react-redux";
 import { Layout, Menu, message } from "antd";
 import { Link, useNavigate } from "react-router-dom";
+import { useIsMobile } from "../hooks/useIsMobile";
+import MobileBottomNav from "./MobileBottomNav";
 import {FolderOpenOutlined,
   FileSearchOutlined,
   RedoOutlined,
@@ -27,6 +29,7 @@ const { Header, Sider, Content } = Layout;
 
 const DefaultLayout = ({ children }) => {
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   const { cartItems, loading } = useSelector((state) => state.rootReducer);
   const [collapsed, setCollapsed] = useState(false);
   const [userRole, setUserRole] = useState("");
@@ -57,6 +60,7 @@ const DefaultLayout = ({ children }) => {
   }, [cartItems]);
 
   const stationOnly = isStationRole(userRole);
+  const showBottomNav = isMobile && !stationOnly;
 
   return (
     <Layout>
@@ -159,7 +163,7 @@ const DefaultLayout = ({ children }) => {
           </Menu.Item>
         </Menu>
       </Sider>
-      <Layout className="site-layout">
+      <Layout className={`site-layout${showBottomNav ? " has-mobile-nav" : ""}`}>
         <Header className="site-layout-background" style={{ padding: 0, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div style={{ display: 'flex', alignItems: 'center' }}>
             {React.createElement(
@@ -216,6 +220,7 @@ const DefaultLayout = ({ children }) => {
         >
           {children}
         </Content>
+        {showBottomNav && <MobileBottomNav />}
       </Layout>
     </Layout>
   );

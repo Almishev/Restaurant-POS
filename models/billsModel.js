@@ -26,6 +26,18 @@ const billSchema = mongoose.Schema(
       type: String,
       required: true,
     },
+    hotelBookingId: {
+      type: String,
+      required: false,
+    },
+    hotelRoomNumber: {
+      type: String,
+      required: false,
+    },
+    hotelGuestName: {
+      type: String,
+      required: false,
+    },
     cartItems: {
       type: Array,
       required: true,

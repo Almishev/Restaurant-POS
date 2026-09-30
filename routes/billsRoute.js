@@ -13,6 +13,7 @@ const {
   getDashboardController,
   getInventoryReportController,
   getFiscalStatusController,
+  getOpenRoomsController,
 } = require("./../controllers/billsController");
 const { requireAuth, requireAdmin } = require("../middleware/authMiddleware");
 
@@ -20,6 +21,7 @@ const router = express.Router();
 
 router.get("/fiscal-status", requireAdmin, getFiscalStatusController);
 router.post("/add-bills", requireAuth, addBillsController);
+router.get("/open-rooms", requireAuth, getOpenRoomsController);
 router.get("/get-bills", requireAuth, getBillsController);
 router.get("/get-bill/:id", requireAuth, getBillByIdController);
 

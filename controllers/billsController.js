@@ -1,11 +1,13 @@
 const billsModel = require("../models/billsModel");
 const Report = require("../models/reportModel");
 const fiscalService = require("../services/fiscalService");
+const hotelPmsService = require("../services/hotelPmsService");
 const Recipe = require("../models/recipeModel");
 const Inventory = require("../models/inventoryModel");
-const { buildSalesReport, buildByHour } = require("../utils/buildSalesReport");
+const { buildSalesReport, buildByHour, isRoomCharge } = require("../utils/buildSalesReport");
 const Item = require("../models/itemModel");
 const Storno = require("../models/stornoModel");
+const mongoose = require("mongoose");
 
 async function resolveReportUserFilter(userId) {
   if (!userId) return null;
@@ -58,34 +60,95 @@ async function sumStornoForPeriod(from, to, userId) {
   return stornos.reduce((sum, s) => sum + (Number(s.totalAmount) || 0), 0);
 }
 
+async function deductInventory(cartItems, userId) {
+  for (const cartItem of cartItems || []) {
+    const recipe = await Recipe.findOne({ item: cartItem._id });
+    if (recipe) {
+      for (const ing of recipe.ingredients) {
+        const inventory = await Inventory.findById(ing.inventory);
+        if (inventory) {
+          const amountToDeduct = ing.quantity * cartItem.quantity;
+          inventory.quantity =
+            Math.round((inventory.quantity - amountToDeduct) * 100) / 100;
+          inventory.history.push({
+            type: "out",
+            amount: amountToDeduct,
+            user: userId || "sale",
+            note: `Продажба на ${cartItem.name}`,
+          });
+          await inventory.save();
+        }
+      }
+    }
+  }
+}
+
+async function addRoomBill(req, res) {
+  const bookingId = req.body.hotelBookingId;
+  const amount = Number(req.body.totalAmount);
+  if (!bookingId) {
+    return res.status(400).json({ message: "Изберете стая" });
+  }
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return res.status(400).json({ message: "Сумата трябва да е по-голяма от нула" });
+  }
+
+  const billId = new mongoose.Types.ObjectId();
+  try {
+    await hotelPmsService.postRoomCharge({
+      bookingId,
+      billId: String(billId),
+      tableName: req.body.tableName || req.body.customerName || "",
+      amount,
+    });
+  } catch (error) {
+    return res.status(error.status || 502).json({
+      message: error.message || "Хотелът не е свързан",
+    });
+  }
+
+  try {
+    const newBill = new billsModel({
+      ...req.body,
+      _id: billId,
+      paymentMode: "На стая",
+      fiscalStatus: "n/a",
+      hotelBookingId: String(bookingId),
+      hotelRoomNumber: req.body.hotelRoomNumber || "",
+      hotelGuestName: req.body.hotelGuestName || "",
+    });
+    await newBill.save();
+    try {
+      await deductInventory(req.body.cartItems, req.body.userId);
+    } catch (inventoryError) {
+      console.log("[BILL] Inventory error:", inventoryError);
+    }
+    return res.send("Bill Created Successfully!");
+  } catch (error) {
+    console.log("[BILL] Room charge save failed:", error);
+    try {
+      await hotelPmsService.stornoRoomCharge(String(billId), amount, `rollback-${billId}`);
+    } catch (rollbackError) {
+      console.log("[BILL] Hotel rollback failed:", rollbackError.message);
+    }
+    return res.status(500).json({
+      message: "Сметката не беше записана и качването към стаята е отменено",
+    });
+  }
+}
+
 const addBillsController = async (req, res) => {
   try {
+    if (isRoomCharge(req.body.paymentMode)) {
+      return await addRoomBill(req, res);
+    }
+
     const newBill = new billsModel({
       ...req.body,
       fiscalStatus: "pending",
     });
     await newBill.save();
-
-    for (const cartItem of req.body.cartItems || []) {
-      const recipe = await Recipe.findOne({ item: cartItem._id });
-      if (recipe) {
-        for (const ing of recipe.ingredients) {
-          const inventory = await Inventory.findById(ing.inventory);
-          if (inventory) {
-            const amountToDeduct = ing.quantity * cartItem.quantity;
-            inventory.quantity =
-              Math.round((inventory.quantity - amountToDeduct) * 100) / 100;
-            inventory.history.push({
-              type: "out",
-              amount: amountToDeduct,
-              user: req.body.userId || "sale",
-              note: `Продажба на ${cartItem.name}`,
-            });
-            await inventory.save();
-          }
-        }
-      }
-    }
+    await deductInventory(req.body.cartItems, req.body.userId);
 
     try {
       const fiscalResult = await fiscalService.printReceipt(newBill);
@@ -138,6 +201,8 @@ const getBillsController = async (req, res) => {
         query.paymentMode = { $in: ["cash", "Брой"] };
       } else if (paymentMode === "card" || paymentMode === "Карта") {
         query.paymentMode = { $in: ["card", "Карта"] };
+      } else if (paymentMode === "room" || paymentMode === "На стая") {
+        query.paymentMode = { $in: ["room", "На стая"] };
       } else {
         query.paymentMode = paymentMode;
       }
@@ -242,7 +307,10 @@ const createZReportController = async (req, res) => {
     }
 
     const bills = await billsModel.find(filter);
-    const { totalAmount, totalBills, byPayment, items } = buildSalesReport(bills);
+    const roomBills = bills.filter((bill) => isRoomCharge(bill.paymentMode));
+    const fiscalBills = bills.filter((bill) => !isRoomCharge(bill.paymentMode));
+    const roomAmount = roomBills.reduce((sum, bill) => sum + (Number(bill.totalAmount) || 0), 0);
+    const { totalAmount, totalBills, byPayment, items } = buildSalesReport(fiscalBills);
 
     const report = new Report({
       type: "Z",
@@ -253,11 +321,13 @@ const createZReportController = async (req, res) => {
       totalBills,
       byPayment,
       items,
-      bills,
+      bills: fiscalBills,
+      roomAmount,
+      roomBillCount: roomBills.length,
     });
     await report.save();
 
-    const billIds = bills.map((b) => b._id);
+    const billIds = fiscalBills.map((b) => b._id);
     if (billIds.length) {
       await billsModel.updateMany(
         { _id: { $in: billIds } },
@@ -498,9 +568,21 @@ const getInventoryReportController = async (req, res) => {
   }
 };
 
+const getOpenRoomsController = async (req, res) => {
+  try {
+    const rooms = await hotelPmsService.getOpenRooms();
+    res.json(rooms);
+  } catch (error) {
+    res.status(error.status || 503).json({
+      message: error.message || "Хотелът не е свързан",
+    });
+  }
+};
+
 module.exports = {
   addBillsController,
   getBillsController,
+  getOpenRoomsController,
   getReportController,
   createZReportController,
   getZReportsController,

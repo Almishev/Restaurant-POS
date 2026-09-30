@@ -3,9 +3,15 @@
  * Normalizes payment modes and builds totals / items breakdown.
  */
 
+function isRoomCharge(mode) {
+  const p = String(mode || "").trim().toLowerCase();
+  return p === "room" || p === "на стая" || p === "стая";
+}
+
 function normalizePaymentMode(mode) {
   if (mode === "Брой" || mode === "cash") return "cash";
   if (mode === "Карта" || mode === "card") return "card";
+  if (isRoomCharge(mode)) return "room";
   return mode || "other";
 }
 
@@ -49,6 +55,7 @@ function buildByHour(bills = []) {
 }
 
 module.exports = {
+  isRoomCharge,
   normalizePaymentMode,
   buildSalesReport,
   buildByHour,
