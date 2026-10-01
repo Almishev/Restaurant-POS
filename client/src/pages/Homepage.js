@@ -123,16 +123,39 @@ const Homepage = () => {
 
   useEffect(() => {
     const open = () => setOperationsOpen(true);
+    const openCart = () => {
+      setCartTab("pending");
+      setMobileView("cart");
+    };
     window.addEventListener("pos-open-operations", open);
-    return () => window.removeEventListener("pos-open-operations", open);
+    window.addEventListener("pos-open-cart", openCart);
+    return () => {
+      window.removeEventListener("pos-open-operations", open);
+      window.removeEventListener("pos-open-cart", openCart);
+    };
   }, []);
 
   useEffect(() => {
     if (!table) return;
-    if (sessionStorage.getItem("pos-open-operations") !== "1") return;
-    sessionStorage.removeItem("pos-open-operations");
-    setOperationsOpen(true);
+    if (sessionStorage.getItem("pos-open-operations") === "1") {
+      sessionStorage.removeItem("pos-open-operations");
+      setOperationsOpen(true);
+    }
+    if (sessionStorage.getItem("pos-open-cart") === "1") {
+      sessionStorage.removeItem("pos-open-cart");
+      setCartTab("pending");
+      setMobileView("cart");
+    }
   }, [table]);
+
+  useEffect(() => {
+    const count = pendingItems.reduce((sum, item) => sum + (Number(item.quantity) || 0), 0);
+    window.dispatchEvent(new CustomEvent("pos-pending-count", { detail: count }));
+  }, [pendingItems]);
+
+  useEffect(() => () => {
+    window.dispatchEvent(new CustomEvent("pos-pending-count", { detail: 0 }));
+  }, []);
 
   useEffect(() => {
     if (!billPopup || paymentMode !== "На стая") return undefined;
@@ -623,11 +646,6 @@ const Homepage = () => {
     (sum, i) => sum + (Number(i.quantity) || 0),
     0
   );
-  const pendingPiecesCount = pendingItems.reduce(
-    (sum, i) => sum + (Number(i.quantity) || 0),
-    0
-  );
-
   // Проверка дали има артикули, които могат да бъдат прехвърлени
   const hasTransferableItems = cartItems.length > 0 || pendingItems.length > 0;
 
@@ -876,24 +894,6 @@ const Homepage = () => {
                   )}
                 </div>
               </div>
-            </div>
-            <div className="order-mobile-done-bar">
-              <Button
-                type="primary"
-                size="large"
-                block
-                className="order-mobile-done-btn"
-                icon={<ShoppingCartOutlined />}
-                onClick={() => {
-                  setCartTab("pending");
-                  setMobileView("cart");
-                }}
-              >
-                Готово
-                {pendingPiecesCount > 0 && (
-                  <span className="order-mobile-done-badge">{pendingPiecesCount}</span>
-                )}
-              </Button>
             </div>
           </div>
         )}

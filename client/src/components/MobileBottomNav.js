@@ -1,33 +1,42 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Button, Form, Input, Modal, message } from "antd";
+import { message } from "antd";
 import {
   ProfileOutlined,
   TableOutlined,
-  PlusOutlined,
   EllipsisOutlined,
+  CheckOutlined,
 } from "@ant-design/icons";
-import axios from "axios";
 
 const MobileBottomNav = () => {
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const [addOpen, setAddOpen] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [form] = Form.useForm();
+  const [pendingCount, setPendingCount] = useState(0);
+
+  useEffect(() => {
+    const onCount = (event) => setPendingCount(Number(event.detail) || 0);
+    window.addEventListener("pos-pending-count", onCount);
+    return () => window.removeEventListener("pos-pending-count", onCount);
+  }, []);
+
+  const selectedTableId = () => {
+    const raw = localStorage.getItem("selectedTable");
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw)._id || null;
+    } catch {
+      return null;
+    }
+  };
 
   const openOrder = () => {
-    const raw = localStorage.getItem("selectedTable");
-    if (!raw) {
+    const id = selectedTableId();
+    if (!id) {
       message.error("Няма избрана маса!");
       navigate("/tables");
       return;
     }
-    try {
-      navigate("/order/" + JSON.parse(raw)._id);
-    } catch {
-      navigate("/tables");
-    }
+    navigate("/order/" + id);
   };
 
   const openOperations = () => {
@@ -35,87 +44,55 @@ const MobileBottomNav = () => {
       window.dispatchEvent(new Event("pos-open-operations"));
       return;
     }
-    const raw = localStorage.getItem("selectedTable");
-    if (!raw) {
+    const id = selectedTableId();
+    if (!id) {
       message.error("Няма избрана маса!");
       navigate("/tables");
       return;
     }
-    try {
-      sessionStorage.setItem("pos-open-operations", "1");
-      navigate("/order/" + JSON.parse(raw)._id);
-    } catch {
-      navigate("/tables");
-    }
+    sessionStorage.setItem("pos-open-operations", "1");
+    navigate("/order/" + id);
   };
 
-  const saveTable = async (values) => {
-    setSaving(true);
-    try {
-      const auth = localStorage.getItem("auth") ? JSON.parse(localStorage.getItem("auth")) : null;
-      await axios.post("/api/tables/add-table", {
-        ...values,
-        createdBy: auth ? auth.userId : "",
-      });
-      message.success("Масата е добавена успешно!");
-      setAddOpen(false);
-      form.resetFields();
-      window.dispatchEvent(new Event("pos-tables-changed"));
-      if (!pathname.startsWith("/tables")) {
-        navigate("/tables");
-      }
-    } catch {
-      message.error("Грешка при добавяне на маса!");
-    } finally {
-      setSaving(false);
+  const openDone = () => {
+    if (pathname.startsWith("/order")) {
+      window.dispatchEvent(new Event("pos-open-cart"));
+      return;
     }
+    const id = selectedTableId();
+    if (!id) {
+      message.error("Няма избрана маса!");
+      navigate("/tables");
+      return;
+    }
+    sessionStorage.setItem("pos-open-cart", "1");
+    navigate("/order/" + id);
   };
 
   const itemClass = (active) => `mobile-tabbar-item${active ? " active" : ""}`;
 
   return (
-    <>
-      <nav className="mobile-tabbar" aria-label="Долни бутони">
-        <button type="button" className={itemClass(pathname.startsWith("/order"))} onClick={openOrder}>
-          <span className="mobile-tabbar-icon"><ProfileOutlined /></span>
-          <span>Поръчка</span>
-        </button>
-        <button type="button" className={itemClass(pathname.startsWith("/tables"))} onClick={() => navigate("/tables")}>
-          <span className="mobile-tabbar-icon"><TableOutlined /></span>
-          <span>Маси</span>
-        </button>
-        <button type="button" className="mobile-tabbar-item" onClick={() => setAddOpen(true)}>
-          <span className="mobile-tabbar-icon"><PlusOutlined /></span>
-          <span>Добави маса</span>
-        </button>
-        <button type="button" className="mobile-tabbar-item" onClick={openOperations}>
-          <span className="mobile-tabbar-icon"><EllipsisOutlined /></span>
-          <span>Операции</span>
-        </button>
-      </nav>
-      <Modal
-        title="Добави нова маса"
-        visible={addOpen}
-        onCancel={() => {
-          setAddOpen(false);
-          form.resetFields();
-        }}
-        footer={null}
-        width="90%"
-        style={{ maxWidth: 420 }}
-      >
-        <Form form={form} layout="vertical" onFinish={saveTable}>
-          <Form.Item name="name" label="Име на маса" rules={[{ required: true, message: "Въведи име!" }]}>
-            <Input size="large" />
-          </Form.Item>
-          <Form.Item>
-            <Button type="primary" htmlType="submit" block size="large" loading={saving} style={{ minHeight: 48 }}>
-              Запази
-            </Button>
-          </Form.Item>
-        </Form>
-      </Modal>
-    </>
+    <nav className="mobile-tabbar" aria-label="Долни бутони">
+      <button type="button" className={itemClass(pathname.startsWith("/order"))} onClick={openOrder}>
+        <span className="mobile-tabbar-icon"><ProfileOutlined /></span>
+        <span>Поръчка</span>
+      </button>
+      <button type="button" className={itemClass(pathname.startsWith("/tables"))} onClick={() => navigate("/tables")}>
+        <span className="mobile-tabbar-icon"><TableOutlined /></span>
+        <span>Маси</span>
+      </button>
+      <button type="button" className="mobile-tabbar-item" onClick={openOperations}>
+        <span className="mobile-tabbar-icon"><EllipsisOutlined /></span>
+        <span>Операции</span>
+      </button>
+      <button type="button" className="mobile-tabbar-item" onClick={openDone}>
+        <span className="mobile-tabbar-icon">
+          <CheckOutlined />
+          {pendingCount > 0 && <span className="mobile-tabbar-badge">{pendingCount}</span>}
+        </span>
+        <span>Готово</span>
+      </button>
+    </nav>
   );
 };
 
