@@ -4,6 +4,7 @@ const {
   getBillsController,
   getReportController,
   createZReportController,
+  closeShiftController,
   getZReportsController,
   getZReportByIdController,
   getUnsynchronizedReportsController,
@@ -26,6 +27,7 @@ router.get("/get-bills", requireAuth, getBillsController);
 router.get("/get-bill/:id", requireAuth, getBillByIdController);
 
 router.get("/get-report", requireAuth, getReportController);
+router.post("/close-shift", requireAuth, closeShiftController);
 router.post("/create-z-report", requireAdmin, createZReportController);
 
 router.get("/z-reports", requireAdmin, getZReportsController);

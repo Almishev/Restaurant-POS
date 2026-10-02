@@ -106,6 +106,7 @@ const ReportsArchivePage = () => {
       filtered = filtered.filter(
         (r) =>
           (r.type && r.type.toLowerCase().includes(search.toLowerCase())) ||
+          (r.reportNumber && String(r.reportNumber).includes(search)) ||
           (r.totalAmount && r.totalAmount.toString().includes(search))
       );
     }
@@ -130,8 +131,28 @@ const ReportsArchivePage = () => {
     }
   };
 
+  const reportLabel = (record) => {
+    if (!record) return "";
+    if (record.type === "shift") return `Смяна № ${record.reportNumber || ""}`;
+    if (record.reportNumber) return `Z отчет № ${record.reportNumber}`;
+    return "Z отчет";
+  };
+
   const columns = [
-    { title: "Тип", dataIndex: "type", key: "type", width: 60 },
+    {
+      title: "№",
+      dataIndex: "reportNumber",
+      key: "reportNumber",
+      width: 70,
+      render: (value) => value || "—",
+    },
+    {
+      title: "Тип",
+      dataIndex: "type",
+      key: "type",
+      width: 90,
+      render: (value) => (value === "shift" ? "Смяна" : value || "Z"),
+    },
     {
       title: "От",
       dataIndex: "from",
@@ -184,7 +205,7 @@ const ReportsArchivePage = () => {
 
   const handlePrint = useReactToPrint({
     content: () => printRef.current,
-    documentTitle: selectedReport ? `Z-отчет-${selectedReport._id}` : "Z-отчет",
+    documentTitle: selectedReport ? reportLabel(selectedReport) : "Отчет",
   });
 
   if (loading) return <Spinner />;
@@ -198,9 +219,9 @@ const ReportsArchivePage = () => {
 
   return (
     <DefaultLayout>
-      <Title level={2}>Архив на Z отчети</Title>
+      <Title level={2}>Архивирани отчети</Title>
       <p style={{ color: "#888", marginBottom: 16 }}>
-        Вътрешни архивирани отчети. Фискалният sync е в тестов режим.
+        Приключени смени и фискални Z отчети. Фискалният sync е само за Z.
       </p>
       <Row gutter={16} style={{ marginBottom: 16 }}>
         <Col>
@@ -213,7 +234,7 @@ const ReportsArchivePage = () => {
         </Col>
         <Col>
           <Input
-            placeholder="Търси по тип или сума"
+            placeholder="Търси по номер, тип или сума"
             prefix={<SearchOutlined />}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -230,13 +251,13 @@ const ReportsArchivePage = () => {
         style={{ background: "white" }}
       />
       <Modal
-        title="Z отчет"
+        title={selectedReport ? reportLabel(selectedReport) : "Отчет"}
         visible={modalOpen}
         onCancel={() => setModalOpen(false)}
         footer={
           selectedReport && (
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-              {!selectedReport.isSynchronized && (
+              {selectedReport.type !== "shift" && !selectedReport.isSynchronized && (
                 <Button
                   icon={<SyncOutlined />}
                   loading={syncing}
@@ -262,7 +283,10 @@ const ReportsArchivePage = () => {
           <div ref={printRef} style={{ padding: 12 }}>
             <div className="info" style={{ textAlign: "center", marginBottom: 12 }}>
               <h2>POS Система</h2>
-              <p>Архивиран Z отчет (вътрешен)</p>
+              <p>{reportLabel(selectedReport)}</p>
+              {selectedReport.fiscalReportId && selectedReport.type !== "shift" && (
+                <p>Номер от принтера: {selectedReport.fiscalReportId}</p>
+              )}
               <p>
                 Период:{" "}
                 <b>
@@ -274,6 +298,13 @@ const ReportsArchivePage = () => {
                 Сума: <b>{formatPrice(selectedReport.totalAmount)}</b>
               </p>
               <p>
+                Сторно: <b>{formatPrice(selectedReport.stornoAmount || 0)}</b>
+              </p>
+              <p>
+                Нетен оборот:{" "}
+                <b>{formatPrice(selectedReport.netAmount ?? selectedReport.totalAmount)}</b>
+              </p>
+              <p>
                 Брой сметки: <b>{selectedReport.totalBills}</b>
               </p>
               <p>
@@ -283,7 +314,8 @@ const ReportsArchivePage = () => {
                 Плащане с карта: <b>{formatPrice(selectedReport.byPayment?.card || 0)}</b>
               </p>
               <p>
-                На стая (извън Z): <b>{formatPrice(selectedReport.roomAmount || 0)}</b>
+                {selectedReport.type === "shift" ? "На стая" : "На стая (извън Z)"}:{" "}
+                <b>{formatPrice(selectedReport.roomAmount || 0)}</b>
               </p>
               <p>
                 Синхронизиран:{" "}

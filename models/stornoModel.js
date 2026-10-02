@@ -80,6 +80,15 @@ const stornoSchema = mongoose.Schema(
     originalBillFiscalId: {
       type: String,
     },
+    includedInShiftReport: {
+      type: Boolean,
+      default: false,
+    },
+    shiftReportId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Report",
+      required: false,
+    },
   },
   { timestamps: true }
 );

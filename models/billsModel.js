@@ -69,6 +69,15 @@ const billSchema = mongoose.Schema(
       ref: "reports",
       required: false,
     },
+    includedInShiftReport: {
+      type: Boolean,
+      default: false,
+    },
+    shiftReportId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Report",
+      required: false,
+    },
     /** ErpNet.FP / fiscal device fields */
     fiscalReceiptId: { type: String },
     fiscalReceiptDateTime: { type: String },

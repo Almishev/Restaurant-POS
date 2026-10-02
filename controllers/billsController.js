@@ -23,6 +23,34 @@ async function resolveReportUserFilter(userId) {
   return userId;
 }
 
+async function nextReportNumber(type) {
+  const last = await Report.findOne({
+    type,
+    reportNumber: { $type: "number" },
+  })
+    .sort({ reportNumber: -1 })
+    .select("reportNumber")
+    .lean();
+  return (last?.reportNumber || 0) + 1;
+}
+
+async function saveReportWithNumber(fields) {
+  let lastError;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const reportNumber = await nextReportNumber(fields.type);
+    try {
+      const report = new Report({ ...fields, reportNumber });
+      await report.save();
+      return report;
+    } catch (error) {
+      lastError = error;
+      if (error && error.code === 11000) continue;
+      throw error;
+    }
+  }
+  throw lastError;
+}
+
 async function buildCategoryBreakdown(bills) {
   const byCategory = {};
   const itemIds = new Set();
@@ -238,6 +266,7 @@ const getReportController = async (req, res) => {
     }
 
     filter.isStornoed = { $ne: true };
+    filter.includedInShiftReport = { $ne: true };
     const bills = await billsModel.find(filter);
 
     const base = buildSalesReport(bills);
@@ -248,20 +277,20 @@ const getReportController = async (req, res) => {
       console.log("[GET REPORT] Category breakdown skipped:", e.message);
     }
     const byHour = buildByHour(bills);
-    const stornoAmount = await sumStornoForPeriod(
-      from,
-      to,
-      resolvedUserId || undefined
-    );
 
     const stornoQuery = {};
     if (from && to) {
       stornoQuery.createdAt = { $gte: new Date(from), $lte: new Date(to) };
     }
     if (resolvedUserId) stornoQuery.userId = resolvedUserId;
+    stornoQuery.includedInShiftReport = { $ne: true };
     const stornoDocs = await Storno.find(stornoQuery).sort({ createdAt: -1 }).lean();
     const preBillStornos = stornoDocs.filter((s) => s.type === "pre_bill");
     const billStornos = stornoDocs.filter((s) => s.type !== "pre_bill");
+    const stornoAmount = stornoDocs.reduce(
+      (sum, item) => sum + (Number(item.totalAmount) || 0),
+      0
+    );
 
     res.json({
       ...base,
@@ -312,20 +341,20 @@ const createZReportController = async (req, res) => {
     const roomAmount = roomBills.reduce((sum, bill) => sum + (Number(bill.totalAmount) || 0), 0);
     const { totalAmount, totalBills, byPayment, items } = buildSalesReport(fiscalBills);
 
-    const report = new Report({
+    const report = await saveReportWithNumber({
       type: "Z",
       from: new Date(from),
       to: new Date(to),
       userId,
       totalAmount,
       totalBills,
+      netAmount: totalAmount,
       byPayment,
       items,
       bills: fiscalBills,
       roomAmount,
       roomBillCount: roomBills.length,
     });
-    await report.save();
 
     const billIds = fiscalBills.map((b) => b._id);
     if (billIds.length) {
@@ -366,9 +395,105 @@ const createZReportController = async (req, res) => {
   }
 };
 
+const closeShiftController = async (req, res) => {
+  try {
+    const { from, to } = req.body;
+    if (!from || !to) {
+      return res.status(400).json({ message: "Избери период!" });
+    }
+    const isAdmin = req.authUser?.role === "admin";
+    const userId = isAdmin ? req.body.userId : req.authUser?.userId;
+    if (!isAdmin && !userId) {
+      return res.status(401).json({ message: "Неоторизиран достъп — липсва userId" });
+    }
+
+    const filter = {
+      isStornoed: { $ne: true },
+      includedInShiftReport: { $ne: true },
+      date: { $gte: new Date(from), $lte: new Date(to) },
+    };
+    if (userId) filter.userId = userId;
+
+    const stornoQuery = {
+      includedInShiftReport: { $ne: true },
+      createdAt: { $gte: new Date(from), $lte: new Date(to) },
+    };
+    if (userId) stornoQuery.userId = userId;
+
+    const bills = await billsModel.find(filter);
+    const stornoDocs = await Storno.find(stornoQuery).sort({ createdAt: -1 }).lean();
+    if (!bills.length && !stornoDocs.length) {
+      return res.status(400).json({ message: "Няма неприключени сметки за този период." });
+    }
+
+    const roomBills = bills.filter((bill) => isRoomCharge(bill.paymentMode));
+    bills.forEach((bill) => {
+      bill.includedInShiftReport = true;
+    });
+    stornoDocs.forEach((item) => {
+      item.includedInShiftReport = true;
+    });
+    const { totalAmount, totalBills, byPayment, items } = buildSalesReport(bills);
+    const stornoAmount = stornoDocs.reduce((sum, item) => sum + (Number(item.totalAmount) || 0), 0);
+    const preBillStornos = stornoDocs.filter((item) => item.type === "pre_bill");
+    const billStornos = stornoDocs.filter((item) => item.type !== "pre_bill");
+    let byCategory = {};
+    try {
+      byCategory = await buildCategoryBreakdown(bills);
+    } catch (categoryError) {
+      console.log("[CLOSE SHIFT] Category breakdown skipped:", categoryError.message);
+    }
+
+    const report = await saveReportWithNumber({
+      type: "shift",
+      from: new Date(from),
+      to: new Date(to),
+      userId: userId || undefined,
+      totalAmount,
+      totalBills,
+      stornoAmount,
+      netAmount: totalAmount - stornoAmount,
+      byPayment,
+      items,
+      bills,
+      stornos: stornoDocs,
+      roomAmount: roomBills.reduce((sum, bill) => sum + (Number(bill.totalAmount) || 0), 0),
+      roomBillCount: roomBills.length,
+    });
+
+    const billIds = bills.map((bill) => bill._id);
+    if (billIds.length) {
+      await billsModel.updateMany(
+        { _id: { $in: billIds } },
+        { $set: { includedInShiftReport: true, shiftReportId: report._id } }
+      );
+    }
+    const stornoIds = stornoDocs.map((item) => item._id);
+    if (stornoIds.length) {
+      await Storno.updateMany(
+        { _id: { $in: stornoIds } },
+        { $set: { includedInShiftReport: true, shiftReportId: report._id } }
+      );
+    }
+
+    res.json({
+      ...report.toObject(),
+      preBillStornos,
+      billStornos,
+      byCategory,
+      byHour: buildByHour(bills),
+      stornoAmount,
+      netAmount: totalAmount - stornoAmount,
+    });
+  } catch (error) {
+    console.log(`[CLOSE SHIFT] ${error.message}`);
+    res.status(500).json({ message: "Грешка при приключване на смяната!", error: error.message });
+  }
+};
+
 const getZReportsController = async (req, res) => {
   try {
-    const reports = await Report.find({ type: "Z" }).sort({ from: -1 });
+    const reports = await Report.find({ type: { $in: ["Z", "shift"] } }).sort({ createdAt: -1 });
     res.json(reports);
   } catch (error) {
     res
@@ -423,6 +548,10 @@ const checkZReportController = async (req, res) => {
 const syncZReportController = async (req, res) => {
   try {
     const { reportId } = req.params;
+    const existing = await Report.findById(reportId);
+    if (existing && existing.type === "shift") {
+      return res.status(400).json({ message: "Смяната не се синхронизира с фискалния принтер" });
+    }
     const report = await fiscalService.synchronizeZReport(reportId);
     res.json(report);
   } catch (error) {
@@ -585,6 +714,7 @@ module.exports = {
   getOpenRoomsController,
   getReportController,
   createZReportController,
+  closeShiftController,
   getZReportsController,
   getZReportByIdController,
   getUnsynchronizedReportsController,

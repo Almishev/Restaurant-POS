@@ -94,10 +94,41 @@ const ReportsPage = () => {
     setLoading(false);
   };
 
+  const handleCloseShift = async () => {
+    if (!dates[0] || !dates[1]) {
+      message.error("Избери период!");
+      return;
+    }
+    setLoading(true);
+    try {
+      const body = {
+        from: dates[0].startOf("day").toISOString(),
+        to: dates[1].endOf("day").toISOString(),
+      };
+      if (selectedUser) body.userId = selectedUser;
+      const res = await axios.post("/api/bills/close-shift", body);
+      setReport(res.data);
+      setIsZ(false);
+      message.success(`Смяна № ${res.data.reportNumber} е приключена`);
+    } catch (error) {
+      message.error(error.response?.data?.message || "Грешка при приключване на смяната!");
+    }
+    setLoading(false);
+  };
+
+  const reportTitle = () => {
+    if (report?.type === "shift") return `Смяна № ${report.reportNumber}`;
+    if (isZ || report?.type === "Z") {
+      return report?.reportNumber ? `Z отчет № ${report.reportNumber}` : "Z отчет (архивиран)";
+    }
+    return "X отчет (справка)";
+  };
+
   const exportCsv = () => {
     if (!report) return;
     const rows = [
-      ["Тип", isZ || report.type === "Z" ? "Z" : "X"],
+      ["Тип", report.type === "shift" ? "Смяна" : isZ || report.type === "Z" ? "Z" : "X"],
+      ["Номер", report.reportNumber || ""],
       ["Обща сума", report.totalAmount],
       ["Сторно", report.stornoAmount ?? 0],
       ["Нетен оборот", report.netAmount ?? report.totalAmount],
@@ -159,6 +190,11 @@ const ReportsPage = () => {
               Генерирай X отчет
             </Button>
           </Col>
+          <Col>
+            <Button danger onClick={handleCloseShift} loading={loading}>
+              Приключи смяна
+            </Button>
+          </Col>
           {userRole === "admin" && (
             <Col>
               <Button type="primary" danger onClick={handleZReport} loading={loading}>
@@ -181,8 +217,11 @@ const ReportsPage = () => {
         {report ? (
           <>
             <Title level={3} style={{ textAlign: "center" }}>
-              {isZ || report.type === "Z" ? "Z отчет (архивиран)" : "X отчет (справка)"}
+              {reportTitle()}
             </Title>
+            {report.fiscalReportId && (isZ || report.type === "Z") && (
+              <Text type="secondary">Номер от принтера: {report.fiscalReportId}</Text>
+            )}
             {report.createdAt && (
               <Text type="secondary">Архивиран на: {new Date(report.createdAt).toLocaleString()}</Text>
             )}
