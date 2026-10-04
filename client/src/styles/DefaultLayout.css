@@ -28,8 +28,16 @@
   padding: 5px !important;
 }
 
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+}
+
 .ant-layout.ant-layout-has-sider {
   height: 100vh;
+  height: 100dvh;
 }
 
 .ant-layout-sider {
@@ -136,7 +144,21 @@
 }
 
 @media (max-width: 768px) {
+  html,
+  body,
+  #root {
+    overflow: hidden;
+  }
+
+  .ant-layout.ant-layout-has-sider,
+  .site-layout.has-mobile-nav {
+    max-height: 100dvh;
+    overflow: hidden;
+  }
+
   .site-layout.has-mobile-nav .ant-layout-content {
+    min-height: 0 !important;
+    overflow: auto;
     padding-bottom: calc(96px + env(safe-area-inset-bottom)) !important;
   }
 }

@@ -1,8 +1,48 @@
 const express = require("express");
 const router = express.Router();
 const KitchenOrder = require("../models/kitchenOrderModel");
+const KioskCounter = require("../models/kioskCounterModel");
 const Item = require("../models/itemModel");
 const Table = require("../models/tableModel");
+
+function sofiaDayKey(date = new Date()) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Europe/Sofia",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+function sofiaDayStart(date = new Date()) {
+  const day = sofiaDayKey(date);
+  const utcMidnight = new Date(`${day}T00:00:00Z`);
+  const sofiaHour = Number(
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Europe/Sofia",
+      hour: "2-digit",
+      hourCycle: "h23",
+    }).format(utcMidnight)
+  );
+  return new Date(utcMidnight.getTime() - sofiaHour * 60 * 60 * 1000);
+}
+
+async function nextKioskNumber() {
+  const key = `kiosk-${sofiaDayKey()}`;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const doc = await KioskCounter.findOneAndUpdate(
+        { key },
+        { $inc: { seq: 1 } },
+        { upsert: true, new: true }
+      );
+      return doc.seq;
+    } catch (error) {
+      if (attempt === 2 || error.code !== 11000) throw error;
+    }
+  }
+  throw new Error("Неуспешен номер за киоск");
+}
 
 router.post("/send-order", async (req, res) => {
   try {
@@ -14,16 +54,58 @@ router.post("/send-order", async (req, res) => {
         return { ...item, department: dbItem ? dbItem.department : undefined };
       })
     );
+    const isKiosk = waiterName === "Киоск";
+    const orderNumber = isKiosk ? await nextKioskNumber() : undefined;
     const newOrder = new KitchenOrder({
-      tableName,
+      tableName: isKiosk ? `КИОСК ${orderNumber}` : tableName,
       items: itemsWithDepartment,
       waiterName,
+      orderNumber,
     });
     await newOrder.save();
-    res.status(201).json({ message: "Поръчката е изпратена към кухнята!" });
+    res.status(201).json({
+      message: "Поръчката е изпратена към кухнята!",
+      orderNumber: newOrder.orderNumber,
+      createdAt: newOrder.createdAt,
+    });
   } catch (error) {
     console.log("[KITCHEN] Грешка при изпращане:", error);
     res.status(400).json({ message: "Грешка при изпращане на поръчка!" });
+  }
+});
+
+router.post("/mark-cashier", async (req, res) => {
+  try {
+    const orderNumber = Number(String(req.body.orderNumber || "").trim());
+    if (!orderNumber) {
+      return res.status(400).json({ message: "Въведи номер." });
+    }
+    const start = sofiaDayStart();
+    const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+    const order = await KitchenOrder.findOne({
+      orderNumber,
+      createdAt: { $gte: start, $lt: end },
+    });
+    if (!order) {
+      return res.status(404).json({ message: "Няма поръчка с този номер за днес." });
+    }
+    if (order.atCashier) {
+      return res.status(200).json({
+        already: true,
+        message: "Поръчката вече е маркирана.",
+        order,
+      });
+    }
+    order.atCashier = true;
+    await order.save();
+    res.status(200).json({
+      already: false,
+      message: "Поръчката е маркирана.",
+      order,
+    });
+  } catch (error) {
+    console.log("[KITCHEN] Грешка при маркиране:", error);
+    res.status(400).json({ message: "Грешка при маркиране на поръчката!" });
   }
 });
 

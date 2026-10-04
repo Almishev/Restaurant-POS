@@ -13,6 +13,8 @@ const kitchenOrderSchema = mongoose.Schema({
     }
   ],
   status: { type: String, default: "ново" },
+  orderNumber: Number,
+  atCashier: { type: Boolean, default: false },
   createdAt: { type: Date, default: Date.now }
 });
 

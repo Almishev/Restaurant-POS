@@ -9,6 +9,9 @@ const TablesPage = () => {
   const [tables, setTables] = useState([]);
   const [loading, setLoading] = useState(false);
   const [isModalVisible, setIsModalVisible] = useState(false);
+  const [kioskNumber, setKioskNumber] = useState("");
+  const [kioskOrder, setKioskOrder] = useState(null);
+  const [kioskMessage, setKioskMessage] = useState("");
   const [form] = Form.useForm();
   const navigate = useNavigate();
 
@@ -58,6 +61,24 @@ const TablesPage = () => {
     }
   };
 
+  const markKioskOrder = async (event) => {
+    event.preventDefault();
+    const orderNumber = kioskNumber.trim();
+    if (!orderNumber) return;
+    try {
+      const res = await axios.post("/api/kitchen/mark-cashier", { orderNumber });
+      setKioskOrder(res.data.order);
+      setKioskMessage(res.data.message);
+      if (res.data.already) message.warning(res.data.message);
+      else message.success(res.data.message);
+    } catch (error) {
+      setKioskOrder(null);
+      const text = error.response?.data?.message || "Няма поръчка с този номер.";
+      setKioskMessage(text);
+      message.error(text);
+    }
+  };
+
   const openTable = (record) => {
     localStorage.setItem("selectedTable", JSON.stringify(record));
     navigate(`/order/${record._id}`);
@@ -65,6 +86,47 @@ const TablesPage = () => {
 
   return (
     <DefaultLayout>
+      <form
+        onSubmit={markKioskOrder}
+        style={{
+          marginBottom: 20,
+          padding: 16,
+          border: "1px solid #d9d9d9",
+          borderRadius: 8,
+          display: "flex",
+          flexWrap: "wrap",
+          gap: 12,
+          alignItems: "flex-end",
+        }}
+      >
+        <label style={{ flex: "1 1 220px" }}>
+          <div style={{ marginBottom: 6, fontWeight: 600 }}>Номер от киоск</div>
+          <Input
+            size="large"
+            value={kioskNumber}
+            onChange={(event) => setKioskNumber(event.target.value)}
+            inputMode="numeric"
+          />
+        </label>
+        <Button type="primary" htmlType="submit" size="large" style={{ minHeight: 44 }}>
+          Маркирай
+        </Button>
+        {kioskMessage && (
+          <div style={{ flex: "1 1 100%", color: kioskOrder?.atCashier ? "#1f4d3a" : "#8d2b2b" }}>
+            {kioskMessage}
+          </div>
+        )}
+        {kioskOrder && (
+          <ul style={{ flex: "1 1 100%", margin: 0, paddingLeft: 18 }}>
+            {(kioskOrder.items || []).map((item, index) => (
+              <li key={`${item.name}-${index}`}>
+                {item.name} × {item.quantity}
+              </li>
+            ))}
+          </ul>
+        )}
+      </form>
+
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 12 }}>
         <h1 style={{ margin: 0 }}>Моите маси</h1>
         <Button type="primary" onClick={showModal} style={{ minHeight: 44 }}>
