@@ -19,7 +19,8 @@ import {FolderOpenOutlined,
   CopyOutlined,
   UnorderedListOutlined,
   RollbackOutlined,
-  FileDoneOutlined
+  FileDoneOutlined,
+  QrcodeOutlined,
 
 } from "@ant-design/icons";
 import "../styles/DefaultLayout.css";
@@ -114,6 +115,11 @@ const DefaultLayout = ({ children }) => {
           {!stationOnly && (
             <Menu.Item key="/tables" icon={<TableOutlined />}>
               <Link to="/tables">Маси</Link>
+            </Menu.Item>
+          )}
+          {!stationOnly && (
+            <Menu.Item key="/kiosk" icon={<QrcodeOutlined />}>
+              <Link to="/kiosk">KIOSK</Link>
             </Menu.Item>
           )}
           {(userRole === "kitchen" || userRole === "admin") && (

@@ -8,6 +8,7 @@ import Register from "./pages/Register";
 import BillsPage from "./pages/BillsPage";
 import CategoriesPage from "./pages/CategoriesPage";
 import TablesPage from "./pages/TablesPage";
+import KioskCashierPage from "./pages/KioskCashierPage";
 import KitchenPage from "./pages/KitchenPage";
 import BarPage from "./pages/BarPage";
 import ReportsPage from "./pages/ReportsPage";
@@ -50,6 +51,7 @@ function App() {
           <Route path="/cart" element={<ProtectedRoute><CartPage /></ProtectedRoute>} />
           <Route path="/bills" element={<ProtectedRoute><BillsPage /></ProtectedRoute>} />
           <Route path="/tables" element={<ProtectedRoute><TablesPage /></ProtectedRoute>} />
+          <Route path="/kiosk" element={<ProtectedRoute><KioskCashierPage /></ProtectedRoute>} />
           <Route path="/kitchen" element={<ProtectedRoute><KitchenPage /></ProtectedRoute>} />
           <Route path="/order/:tableId" element={<ProtectedRoute><Homepage /></ProtectedRoute>} />
           <Route path="/login" element={<Login />} />

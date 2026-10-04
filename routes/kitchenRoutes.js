@@ -89,9 +89,35 @@ router.post("/mark-cashier", async (req, res) => {
     if (!order) {
       return res.status(404).json({ message: "Няма поръчка с този номер за днес." });
     }
-    if (order.atCashier) {
+    let pricesChanged = false;
+    const itemsWithPrice = [];
+    for (const item of order.items) {
+      const plain = typeof item.toObject === "function" ? item.toObject() : { ...item };
+      if (plain.price == null) {
+        const dbItem = await Item.findOne({ name: plain.name });
+        plain.price = dbItem ? dbItem.price : 0;
+        pricesChanged = true;
+      }
+      itemsWithPrice.push(plain);
+    }
+    if (pricesChanged) {
+      order.items = itemsWithPrice;
+      order.markModified("items");
+    }
+    if (order.billed) {
+      await order.save();
       return res.status(200).json({
         already: true,
+        billed: true,
+        message: "Поръчката вече е платена.",
+        order,
+      });
+    }
+    if (order.atCashier) {
+      if (pricesChanged) await order.save();
+      return res.status(200).json({
+        already: true,
+        billed: false,
         message: "Поръчката вече е маркирана.",
         order,
       });
@@ -100,12 +126,33 @@ router.post("/mark-cashier", async (req, res) => {
     await order.save();
     res.status(200).json({
       already: false,
+      billed: false,
       message: "Поръчката е маркирана.",
       order,
     });
   } catch (error) {
     console.log("[KITCHEN] Грешка при маркиране:", error);
     res.status(400).json({ message: "Грешка при маркиране на поръчката!" });
+  }
+});
+
+router.post("/mark-billed", async (req, res) => {
+  try {
+    const orderNumber = Number(String(req.body.orderNumber || "").trim());
+    const start = sofiaDayStart();
+    const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+    const order = await KitchenOrder.findOne({
+      orderNumber,
+      createdAt: { $gte: start, $lt: end },
+    });
+    if (!order) {
+      return res.status(404).json({ message: "Няма поръчка с този номер за днес." });
+    }
+    order.billed = true;
+    await order.save();
+    res.status(200).json({ message: "Поръчката е платена.", order });
+  } catch (error) {
+    res.status(400).json({ message: "Грешка при отбелязване на плащането!" });
   }
 });
 
