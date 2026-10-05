@@ -15,7 +15,18 @@ const loginController = async (req, res) => {
     }
 
     const { userId, password } = req.body;
-    const user = await userModal.findOne({ userId, password, verified: true });
+    let user;
+    if (userId) {
+      user = await userModal.findOne({ userId, password, verified: true });
+    } else if (password) {
+      const matches = await userModal.find({ password, verified: true });
+      if (matches.length > 1) {
+        return res.status(400).json({
+          message: "Този код се ползва от повече от един потребител.",
+        });
+      }
+      user = matches[0];
+    }
     if (user) {
       res.status(200).json({
         name: user.name,

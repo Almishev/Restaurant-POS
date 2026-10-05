@@ -132,11 +132,6 @@ const DefaultLayout = ({ children }) => {
               <Link to="/bar">Бар</Link>
             </Menu.Item>
           )}
-          {userRole === "admin" && (
-            <Menu.Item key="/dashboard" icon={<CopyOutlined />}>
-              <Link to="/dashboard">Dashboard</Link>
-            </Menu.Item>
-          )}
           {!stationOnly && (
             <Menu.Item key="/reports" icon={<CopyOutlined />}>
               <Link to="/reports">Отчети</Link>
@@ -184,6 +179,9 @@ const DefaultLayout = ({ children }) => {
           {userRole === "admin" && (
             <div style={{ display: 'flex', alignItems: 'center' }}>
               <Menu theme="light" mode="horizontal" style={{ display: 'flex', borderBottom: 'none', background: 'transparent' }}>
+                <Menu.Item key="/dashboard" icon={<CopyOutlined />} style={{ margin: '0 8px' }}>
+                  <Link to="/dashboard" style={{ color: '#1890ff' }}>Dashboard</Link>
+                </Menu.Item>
                 <Menu.Item key="/reports-archive" icon={<FileSearchOutlined />} style={{ margin: '0 8px' }}>
                   <Link to="/reports-archive" style={{ color: '#1890ff' }}>Архивирани отчети</Link>
                 </Menu.Item>

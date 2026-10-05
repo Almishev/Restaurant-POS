@@ -102,6 +102,45 @@ body {
   min-height: 44px;
 }
 
+.pin-login {
+  max-width: 420px;
+}
+
+.pin-display {
+  min-height: 64px;
+  margin-bottom: 16px;
+  border-radius: 12px;
+  background: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  letter-spacing: 8px;
+  color: rgb(2, 2, 75);
+}
+
+.pin-pad {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.pin-key {
+  min-height: 72px;
+  border: 0;
+  border-radius: 12px;
+  background: #fff;
+  color: rgb(2, 2, 75);
+  font-size: 28px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.pin-key:active {
+  background: rgba(2, 2, 75, 0.12);
+}
+
 @media (max-width: 480px) {
   .regsiter-form {
     max-width: 100%;

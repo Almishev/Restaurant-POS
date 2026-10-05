@@ -1,25 +1,29 @@
-import React, { useEffect } from "react";
-import { Form, Input, Button, message } from "antd";
+import React, { useEffect, useState } from "react";
+import { Button, message } from "antd";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useDispatch } from "react-redux";
 import { getHomePath } from "../utils/authRoles";
 
+const KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "C", "0", "⌫"];
+
 const Login = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
+  const [code, setCode] = useState("");
+  const [busy, setBusy] = useState(false);
 
   const redirectByRole = (auth) => {
     const role = auth?.role || "user";
     navigate(getHomePath(role), { replace: true });
   };
 
-  const handleSubmit = async (value) => {
+  const handleSubmit = async (password = code) => {
+    if (!password || busy) return;
     try {
-      dispatch({
-        type: "SHOW_LOADING",
-      });
-      const res = await axios.post("/api/users/login", value);
+      setBusy(true);
+      dispatch({ type: "SHOW_LOADING" });
+      const res = await axios.post("/api/users/login", { password });
       dispatch({ type: "HIDE_LOADING" });
       message.success("Успешно влизане");
       localStorage.setItem("auth", JSON.stringify(res.data));
@@ -30,15 +34,27 @@ const Login = () => {
       redirectByRole(res.data);
     } catch (error) {
       dispatch({ type: "HIDE_LOADING" });
+      setCode("");
       const status = error?.response?.status;
       const msg =
         error?.response?.data?.message ||
-        (status === 403
-          ? "Абонаментът не е валиден"
-          : "Възникна грешка при вход");
+        (status === 403 ? "Абонаментът не е валиден" : "Грешен код");
       message.error(msg);
-      console.log(error);
+    } finally {
+      setBusy(false);
     }
+  };
+
+  const press = (key) => {
+    if (key === "C") {
+      setCode("");
+      return;
+    }
+    if (key === "⌫") {
+      setCode((current) => current.slice(0, -1));
+      return;
+    }
+    setCode((current) => (current.length >= 12 ? current : current + key));
   };
 
   const handleExit = () => {
@@ -62,28 +78,49 @@ const Login = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navigate]);
 
+  useEffect(() => {
+    const onKey = (event) => {
+      if (event.key >= "0" && event.key <= "9") {
+        press(event.key);
+      } else if (event.key === "Backspace") {
+        press("⌫");
+      } else if (event.key === "Enter") {
+        setCode((current) => {
+          handleSubmit(current);
+          return current;
+        });
+      } else if (event.key === "Escape") {
+        press("C");
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [busy]);
+
   return (
     <div className="register">
-      <div className="regsiter-form">
+      <div className="regsiter-form pin-login">
         <h1>POS Система</h1>
-        <h3>Вход</h3>
-        <Form layout="vertical" onFinish={handleSubmit}>
-          <Form.Item name="userId" label="Потребителско име">
-            <Input size="large" />
-          </Form.Item>
-          <Form.Item name="password" label="Парола">
-            <Input.Password size="large" />
-          </Form.Item>
-
-          <div className="login-actions">
-            <Button danger size="large" onClick={handleExit}>
-              Изход
-            </Button>
-            <Button type="primary" htmlType="submit" size="large">
-              Вход
-            </Button>
-          </div>
-        </Form>
+        <h3>Код за достъп</h3>
+        <div className="pin-display" aria-label="Въведен код">
+          {code ? "•".repeat(code.length - 1) + code.slice(-1) : "—"}
+        </div>
+        <div className="pin-pad">
+          {KEYS.map((key) => (
+            <button key={key} type="button" className="pin-key" onClick={() => press(key)}>
+              {key}
+            </button>
+          ))}
+        </div>
+        <div className="login-actions">
+          <Button danger size="large" onClick={handleExit}>
+            Изход
+          </Button>
+          <Button type="primary" size="large" loading={busy} onClick={() => handleSubmit()}>
+            Вход
+          </Button>
+        </div>
       </div>
     </div>
   );
