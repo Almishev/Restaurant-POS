@@ -1,14 +1,16 @@
 import React, { useEffect, useRef, useState } from "react";
 import DefaultLayout from "../components/DefaultLayout";
-import { Button, Input, Select, message } from "antd";
+import { Button, Input, InputNumber, Select, message } from "antd";
 import axios from "axios";
 import { formatPrice } from "../utils/formatPrice";
+import { useHotelLink } from "../utils/hotelLink";
 
 const KioskCashierPage = () => {
   const [kioskNumber, setKioskNumber] = useState("");
   const [kioskOrder, setKioskOrder] = useState(null);
   const [kioskMessage, setKioskMessage] = useState("");
   const [paymentMode, setPaymentMode] = useState("Брой");
+  const [cashReceived, setCashReceived] = useState(null);
   const [openRooms, setOpenRooms] = useState([]);
   const [hotelBookingId, setHotelBookingId] = useState("");
   const [paying, setPaying] = useState(false);
@@ -16,6 +18,7 @@ const KioskCashierPage = () => {
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const scanRef = useRef(0);
+  const hotelLink = useHotelLink();
 
   useEffect(() => {
     if (paymentMode !== "На стая") return;
@@ -121,6 +124,11 @@ const KioskCashierPage = () => {
 
   const payKioskOrder = async () => {
     if (!kioskOrder || kioskOrder.billed) return;
+    const isCash = paymentMode === "Брой" || paymentMode === "cash";
+    if (isCash && cashReceived != null && cashReceived !== "" && Number(cashReceived) + 0.001 < kioskTotal) {
+      message.error("Получените пари са по-малко от сметката");
+      return;
+    }
     if (paymentMode === "На стая" && !hotelBookingId) {
       message.error("Изберете стая");
       return;
@@ -135,6 +143,7 @@ const KioskCashierPage = () => {
       totalAmount: kioskTotal,
       paymentMode,
       userId: auth?.userId,
+      cashReceived: paymentMode === "Брой" || paymentMode === "cash" ? cashReceived : undefined,
     };
     if (paymentMode === "На стая" && room) {
       bill.hotelBookingId = room.bookingId;
@@ -219,12 +228,31 @@ const KioskCashierPage = () => {
               <div style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "flex-end" }}>
                 <label>
                   <div style={{ marginBottom: 6, fontWeight: 600 }}>Начин на плащане</div>
-                  <Select value={paymentMode} onChange={setPaymentMode} style={{ minWidth: 220 }} size="large">
+                  <Select value={paymentMode} onChange={(value) => { setPaymentMode(value); setCashReceived(null); }} style={{ minWidth: 220 }} size="large">
                     <Select.Option value="Брой">Брой</Select.Option>
                     <Select.Option value="Карта">Карта</Select.Option>
-                    <Select.Option value="На стая">На стая</Select.Option>
+                    {hotelLink && <Select.Option value="На стая">На стая</Select.Option>}
                   </Select>
                 </label>
+                {(paymentMode === "Брой" || paymentMode === "cash") && (
+                  <label>
+                    <div style={{ marginBottom: 6, fontWeight: 600 }}>Получени</div>
+                    <InputNumber
+                      min={0}
+                      step={0.01}
+                      size="large"
+                      value={cashReceived}
+                      onChange={setCashReceived}
+                      placeholder={formatPrice(kioskTotal)}
+                      style={{ minWidth: 160 }}
+                    />
+                    {cashReceived != null && cashReceived !== "" && (
+                      <div style={{ marginTop: 6 }}>
+                        Ресто: {formatPrice(Math.max(0, Math.round((Number(cashReceived) - kioskTotal) * 100) / 100))}
+                      </div>
+                    )}
+                  </label>
+                )}
                 {paymentMode === "На стая" && (
                   <label>
                     <div style={{ marginBottom: 6, fontWeight: 600 }}>Стая</div>

@@ -80,11 +80,34 @@ const stornoSchema = mongoose.Schema(
     originalBillFiscalId: {
       type: String,
     },
+    uniqueSaleNumber: {
+      type: String,
+    },
+    fiscalMemorySerialNumber: {
+      type: String,
+    },
+    fiscalDeviceSerialNumber: {
+      type: String,
+    },
+    hotelStornoStatus: {
+      type: String,
+      enum: ["", "pending", "posted", "n/a"],
+      default: "",
+    },
     includedInShiftReport: {
       type: Boolean,
       default: false,
     },
     shiftReportId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Report",
+      required: false,
+    },
+    includedInXReport: {
+      type: Boolean,
+      default: false,
+    },
+    xReportId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Report",
       required: false,

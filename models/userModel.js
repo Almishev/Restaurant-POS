@@ -22,6 +22,14 @@ const userSchema = mongoose.Schema(
       type: String,
       default: "user",
     },
+    fiscalOperatorCode: {
+      type: String,
+      default: "",
+    },
+    fiscalOperatorPassword: {
+      type: String,
+      default: "",
+    },
   },
   { timestamp: true }
 );

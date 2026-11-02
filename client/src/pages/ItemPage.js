@@ -184,6 +184,9 @@ const ItemPage = () => {
                 <Select.Option value="bar">Бар</Select.Option>
               </Select>
             </Form.Item>
+            <Form.Item name="taxGroup" label="Данъчна група" initialValue={2}>
+              <InputNumber min={1} max={8} step={1} precision={0} style={{ width: "100%" }} />
+            </Form.Item>
             <div className="d-flex justify-content-end">
               <Button type="primary" htmlType="submit">
                 Запази

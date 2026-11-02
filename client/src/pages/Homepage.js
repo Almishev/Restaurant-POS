@@ -11,6 +11,7 @@ import RenameTableModal from "../components/RenameTableModal";
 import OrderCartPanel from "../components/OrderCartPanel";
 import { formatPrice } from "../utils/formatPrice";
 import { mergeLineItems } from "../utils/mergeLineItems";
+import { useHotelLink } from "../utils/hotelLink";
 import { useIsMobile } from "../hooks/useIsMobile";
 import "../styles/OrderPage.css";
 
@@ -38,6 +39,8 @@ const Homepage = () => {
   const [stornoPickerOpen, setStornoPickerOpen] = useState(false);
   const [form] = Form.useForm();
   const paymentMode = Form.useWatch("paymentMode", form);
+  const cashReceived = Form.useWatch("cashReceived", form);
+  const hotelLink = useHotelLink();
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const [isNoteModalVisible, setIsNoteModalVisible] = useState(false);
@@ -476,6 +479,11 @@ const Homepage = () => {
       console.log("[DEBUG] pendingItems:", pendingItems);
       const allItems = [...cartItems, ...pendingItems];
       const total = allItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
+      const isCash = value.paymentMode === "Брой" || value.paymentMode === "cash";
+      if (isCash && value.cashReceived != null && value.cashReceived !== "" && Number(value.cashReceived) + 0.001 < total) {
+        message.error("Получените пари са по-малко от сметката");
+        return;
+      }
       // Вземи userId на логнатия потребител
       const userId = userData?.userId;
       console.log("[DEBUG] value от формата:", value);
@@ -1045,9 +1053,14 @@ const Homepage = () => {
             <Select style={{ minWidth: 220 }}>
               <Select.Option value="Брой">Брой</Select.Option>
               <Select.Option value="Карта">Карта</Select.Option>
-              <Select.Option value="На стая">На стая</Select.Option>
+              {hotelLink && <Select.Option value="На стая">На стая</Select.Option>}
             </Select>
           </Form.Item>
+          {(paymentMode === "Брой" || paymentMode === "cash") && (
+            <Form.Item name="cashReceived" label="Получени">
+              <InputNumber min={0} step={0.01} style={{ width: "100%" }} placeholder={formatPrice(grandTotal)} />
+            </Form.Item>
+          )}
           {paymentMode === "На стая" && (
             <Form.Item
               name="hotelBookingId"
@@ -1083,6 +1096,11 @@ const Homepage = () => {
             <h3>
               Обща сума - <b>{formatPrice(grandTotal)}</b>
             </h3>
+            {(paymentMode === "Брой" || paymentMode === "cash") && cashReceived != null && cashReceived !== "" && (
+              <h5>
+                Ресто : <b>{formatPrice(Math.max(0, Math.round((Number(cashReceived) - grandTotal) * 100) / 100))}</b>
+              </h5>
+            )}
           </div>
           <div className="d-flex justify-content-end">
             <Button type="primary" htmlType="submit">

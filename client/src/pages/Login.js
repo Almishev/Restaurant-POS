@@ -12,6 +12,8 @@ const Login = () => {
   const navigate = useNavigate();
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
+  const [softwareName, setSoftwareName] = useState("PirinPixel restaurant");
+  const [softwareVersion, setSoftwareVersion] = useState("");
 
   const redirectByRole = (auth) => {
     const role = auth?.role || "user";
@@ -67,6 +69,16 @@ const Login = () => {
   };
 
   useEffect(() => {
+    fetch("/api/health")
+      .then((response) => response.json())
+      .then((data) => {
+        if (data?.name) setSoftwareName(data.name);
+        if (data?.version) setSoftwareVersion(data.version);
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
     const raw = localStorage.getItem("auth");
     if (raw) {
       try {
@@ -101,7 +113,7 @@ const Login = () => {
   return (
     <div className="register">
       <div className="regsiter-form pin-login">
-        <h1>POS Система</h1>
+        <h1>PirinPixel</h1>
         <h3>Код за достъп</h3>
         <div className="pin-display" aria-label="Въведен код">
           {code ? "•".repeat(code.length - 1) + code.slice(-1) : "—"}
@@ -121,6 +133,9 @@ const Login = () => {
             Вход
           </Button>
         </div>
+      </div>
+      <div className="software-corner">
+        {softwareName}{softwareVersion ? ` ${softwareVersion}` : ""}
       </div>
     </div>
   );

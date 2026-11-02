@@ -49,11 +49,27 @@ async function request(path, options = {}) {
   return data;
 }
 
+function isConfigured() {
+  const base = String(process.env.HOTEL_PMS_URL || "").trim();
+  const key = String(process.env.HOTEL_PMS_API_KEY || "").trim();
+  return Boolean(base && key);
+}
+
 function getOpenRooms() {
   return request("/api/integration/open-rooms");
 }
 
-function postRoomCharge({ bookingId, billId, tableName, amount }) {
+function postRoomCharge({
+  bookingId,
+  billId,
+  tableName,
+  amount,
+  uniqueSaleNumber,
+  fiscalReceiptId,
+  fiscalReceiptDateTime,
+  fiscalMemorySerialNumber,
+  fiscalDeviceSerialNumber,
+}) {
   return request("/api/integration/room-charges", {
     method: "POST",
     body: {
@@ -61,6 +77,11 @@ function postRoomCharge({ bookingId, billId, tableName, amount }) {
       billId: String(billId),
       tableName: tableName || "",
       amount: Number(amount),
+      uniqueSaleNumber: String(uniqueSaleNumber || ""),
+      fiscalReceiptId: String(fiscalReceiptId || ""),
+      fiscalReceiptDateTime: String(fiscalReceiptDateTime || ""),
+      fiscalMemorySerialNumber: String(fiscalMemorySerialNumber || ""),
+      fiscalDeviceSerialNumber: String(fiscalDeviceSerialNumber || ""),
     },
   });
 }
@@ -77,6 +98,7 @@ function stornoRoomCharge(billId, amount, stornoKey) {
 
 module.exports = {
   HotelPmsError,
+  isConfigured,
   getOpenRooms,
   postRoomCharge,
   stornoRoomCharge,

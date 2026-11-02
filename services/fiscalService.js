@@ -1,18 +1,10 @@
 const mongoose = require('mongoose');
-const Report = require('../models/reportModel');
-const { isRoomCharge } = require('../utils/buildSalesReport');
 
 /**
  * ErpNet.FP integration (http://localhost:8001 by default).
- * FISCAL_TEST_MODE=true → mock responses (no device needed).
- * FISCAL_TEST_MODE=false → real HTTP calls to ErpNet.FP.
+ * A sale is stored only after the fiscal device prints the receipt.
  */
 class FiscalService {
-  get isTestMode() {
-    if (this._forceTestMode !== undefined) return this._forceTestMode;
-    return process.env.FISCAL_TEST_MODE !== 'false';
-  }
-
   get baseUrl() {
     return (process.env.FISCAL_FP_BASE_URL || 'http://localhost:8001').replace(
       /\/$/,
@@ -36,22 +28,26 @@ class FiscalService {
     return Number(process.env.FISCAL_TAX_GROUP || 2);
   }
 
-  get testDeviceSerial() {
-    return process.env.FISCAL_TEST_DEVICE_SERIAL || 'TEST0001';
-  }
-
   get timeoutMs() {
     return Number(process.env.FISCAL_TIMEOUT_MS || 30000);
   }
 
-  setTestMode(enabled) {
-    this._forceTestMode = Boolean(enabled);
-  }
-
   mapPaymentType(paymentMode) {
     const p = String(paymentMode || '').toLowerCase();
+    if (p === 'room' || p.includes('стая') || p === 'credit') return 'credit';
     if (p === 'card' || p === 'карта' || p.includes('card')) return 'card';
     return 'cash';
+  }
+
+  deviceCode(serial) {
+    const cleaned = String(serial || '')
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, '');
+    if (!cleaned) {
+      throw new Error('Фискалното устройство не върна сериен номер');
+    }
+    if (cleaned.length >= 8) return cleaned.slice(-8);
+    return cleaned.padStart(8, '0');
   }
 
   mapStornoReasonToFiscalCode(reason) {
@@ -91,7 +87,7 @@ class FiscalService {
       .flat();
   }
 
-  async nextUnpDocNumber() {
+  async nextUnpDocNumber(deviceCode) {
     const Counter =
       mongoose.models.FiscalCounter ||
       mongoose.model(
@@ -102,17 +98,17 @@ class FiscalService {
         })
       );
     const doc = await Counter.findByIdAndUpdate(
-      'unp',
+      `unp:${deviceCode}`,
       { $inc: { seq: 1 } },
       { new: true, upsert: true }
     );
-    return String(doc.seq).padStart(7, '0');
+    return String(doc.seq).padStart(7, '0').slice(-7);
   }
 
-  buildUniqueSaleNumber(deviceSerial, docNumber) {
-    const serial = String(deviceSerial || this.testDeviceSerial).toUpperCase();
-    const op = String(this.operator).padStart(4, '0').slice(-4);
-    return `${serial}-${op}-${docNumber}`;
+  buildUniqueSaleNumber(deviceCode, operatorCode, docNumber) {
+    const op = String(operatorCode || this.operator).replace(/\D/g, '').padStart(4, '0').slice(-4);
+    const seq = String(docNumber).padStart(7, '0').slice(-7);
+    return `${deviceCode}-${op}-${seq}`;
   }
 
   async httpJson(method, path, body) {
@@ -175,17 +171,6 @@ class FiscalService {
   }
 
   async listPrinters() {
-    if (this.isTestMode) {
-      return {
-        [this.testDeviceSerial.toLowerCase()]: {
-          serialNumber: this.testDeviceSerial,
-          manufacturer: 'Mock',
-          model: 'TEST',
-          fiscalMemorySerialNumber: 'FM-TEST-001',
-          itemTextMaxLength: 32,
-        },
-      };
-    }
     return this.httpJson('GET', '/printers');
   }
 
@@ -194,48 +179,43 @@ class FiscalService {
     const printers = await this.listPrinters();
     const ids = Object.keys(printers || {});
     if (!ids.length) {
-      throw new Error(
-        'Няма конфигуриран принтер в ErpNet.FP (Available 0). Добави устройство или остави FISCAL_TEST_MODE=true.'
-      );
+      throw new Error('Няма конфигуриран принтер в ErpNet.FP');
     }
     return ids[0];
   }
 
   async getPrinterInfo(printerId) {
-    if (this.isTestMode) {
-      return {
-        serialNumber: this.testDeviceSerial,
-        fiscalMemorySerialNumber: 'FM-TEST-001',
-        itemTextMaxLength: 32,
-      };
-    }
     const id = printerId || (await this.resolvePrinterId());
     return this.httpJson('GET', `/printers/${encodeURIComponent(id)}`);
   }
 
-  async getStatus() {
-    if (this.isTestMode) {
-      return {
-        ok: true,
-        testMode: true,
-        baseUrl: this.baseUrl,
-        message: 'Тестов режим — няма реална връзка към каса',
-      };
+  async requireSerial(printerId) {
+    const info = await this.getPrinterInfo(printerId);
+    const serial = info?.serialNumber;
+    if (!serial) {
+      throw new Error('Фискалното устройство не върна сериен номер');
     }
+    return serial;
+  }
+
+  async getStatus() {
     try {
       const printers = await this.listPrinters();
       const ids = Object.keys(printers || {});
-      let status = null;
-      if (ids.length) {
-        const id = this.printerId || ids[0];
-        status = await this.httpJson(
-          'GET',
-          `/printers/${encodeURIComponent(id)}/status`
-        );
+      if (!ids.length) {
+        return {
+          ok: false,
+          baseUrl: this.baseUrl,
+          error: 'Няма конфигуриран принтер в ErpNet.FP',
+        };
       }
+      const id = this.printerId || ids[0];
+      const status = await this.httpJson(
+        'GET',
+        `/printers/${encodeURIComponent(id)}/status`
+      );
       return {
         ok: true,
-        testMode: false,
         baseUrl: this.baseUrl,
         printerCount: ids.length,
         printers,
@@ -244,75 +224,52 @@ class FiscalService {
     } catch (error) {
       return {
         ok: false,
-        testMode: false,
         baseUrl: this.baseUrl,
         error: error.message,
       };
     }
   }
 
-  mockReceiptResult(amount, prefix = 'TEST') {
-    const now = new Date();
-    const pad = (n) => String(n).padStart(2, '0');
-    const receiptDateTime = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
-    return {
-      ok: 'true',
-      receiptNumber: `${prefix}-${String(Date.now()).slice(-7)}`,
-      receiptDateTime,
-      receiptAmount: amount,
-      fiscalMemorySerialNumber: 'FM-TEST-001',
-      messages: [{ type: 'info', text: 'Mock fiscal receipt (test mode)' }],
-    };
-  }
-
   /**
    * Print fiscal receipt for a closed bill.
    */
-  async printReceipt(bill) {
-    if (isRoomCharge(bill.paymentMode)) {
-      throw new Error("Сметка към стая не се фискализира в ресторанта");
-    }
+  async printReceipt(bill, operator = {}) {
     const cartItems = bill.cartItems || [];
     const totalAmount = Number(bill.totalAmount) || 0;
     const paymentType = this.mapPaymentType(bill.paymentMode);
     const items = this.buildSaleItems(cartItems);
+    const operatorCode = String(operator.code || this.operator).replace(/\D/g, '').padStart(4, '0').slice(-4);
+    const operatorPassword = String(operator.password || this.operatorPassword);
 
-    const docNumber = await this.nextUnpDocNumber();
-    let deviceSerial = this.testDeviceSerial;
-    let printerId = this.printerId;
-
-    if (!this.isTestMode) {
-      printerId = await this.resolvePrinterId();
-      const info = await this.getPrinterInfo(printerId);
-      deviceSerial = info.serialNumber || deviceSerial;
+    const printerId = await this.resolvePrinterId();
+    const deviceSerial = await this.requireSerial(printerId);
+    const code = this.deviceCode(deviceSerial);
+    const docNumber = await this.nextUnpDocNumber(code);
+    const uniqueSaleNumber = this.buildUniqueSaleNumber(code, operatorCode, docNumber);
+    let paymentAmount = totalAmount;
+    if (paymentType === 'cash' && bill.cashReceived != null && bill.cashReceived !== '') {
+      const received = Math.round(Number(bill.cashReceived) * 100) / 100;
+      if (!Number.isFinite(received) || received + 0.001 < totalAmount) {
+        throw new Error('Получените пари са по-малко от сметката');
+      }
+      paymentAmount = received;
     }
-
-    const uniqueSaleNumber = this.buildUniqueSaleNumber(deviceSerial, docNumber);
     const payload = {
       uniqueSaleNumber,
-      operator: String(this.operator),
-      operatorPassword: String(this.operatorPassword),
+      operator: operatorCode,
+      operatorPassword,
       items,
-      payments: [{ amount: totalAmount, paymentType }],
+      payments: [{ amount: paymentAmount, paymentType }],
     };
 
-    let result;
-    if (this.isTestMode) {
-      console.log('[FISCAL] TEST printReceipt', {
-        uniqueSaleNumber,
-        items: items.length,
-        totalAmount,
-        paymentType,
-      });
-      await new Promise((r) => setTimeout(r, 200));
-      result = this.mockReceiptResult(totalAmount);
-    } else {
-      result = await this.httpJson(
-        'POST',
-        `/printers/${encodeURIComponent(printerId)}/receipt`,
-        payload
-      );
-      this.assertOk(result, 'Print receipt');
+    const result = await this.httpJson(
+      'POST',
+      `/printers/${encodeURIComponent(printerId)}/receipt`,
+      payload
+    );
+    this.assertOk(result, 'Print receipt');
+    if (!result.receiptNumber) {
+      throw new Error('Фискалното устройство не върна номер на бона');
     }
 
     return {
@@ -326,53 +283,13 @@ class FiscalService {
       timestamp: result.receiptDateTime
         ? new Date(result.receiptDateTime)
         : new Date(),
-      message: this.isTestMode
-        ? 'Фискален бон (тестов режим)'
-        : 'Фискален бон отпечатан',
+      message: 'Фискален бон отпечатан',
       raw: result,
     };
   }
 
-  async printStornoBon(originalBill, stornoId, reason, cartItems) {
-    if (isRoomCharge(originalBill.paymentMode)) {
-      throw new Error("Сторно към стая не се фискализира в ресторанта");
-    }
+  async printStornoBon(originalBill, stornoId, reason, cartItems, operator = {}) {
     try {
-      const items = this.buildSaleItems(cartItems);
-      const totalAmount = items
-        .filter((i) => i.type === 'sale')
-        .reduce(
-          (s, i) => s + (Number(i.unitPrice) || 0) * (Number(i.quantity) || 1),
-          0
-        );
-      const paymentType = this.mapPaymentType(originalBill.paymentMode);
-      const fiscalReason = this.mapStornoReasonToFiscalCode(reason);
-
-      if (this.isTestMode) {
-        console.log('[FISCAL] TEST printStornoBon', {
-          billId: originalBill._id,
-          stornoId,
-          reason: fiscalReason,
-        });
-        await new Promise((r) => setTimeout(r, 300));
-        const result = this.mockReceiptResult(totalAmount, 'STORNO-TEST');
-        return {
-          success: true,
-          fiscalReceiptId: result.receiptNumber,
-          timestamp: new Date(),
-          message: 'Сторно бон (тестов режим)',
-          raw: result,
-        };
-      }
-
-      const printerId = await this.resolvePrinterId();
-      const uniqueSaleNumber =
-        originalBill.uniqueSaleNumber ||
-        this.buildUniqueSaleNumber(
-          originalBill.fiscalDeviceSerialNumber || this.testDeviceSerial,
-          await this.nextUnpDocNumber()
-        );
-
       if (
         !originalBill.fiscalReceiptId ||
         !originalBill.fiscalReceiptDateTime ||
@@ -382,11 +299,30 @@ class FiscalService {
           'Оригиналният бон няма фискални данни (receiptNumber / dateTime / FM). Не може да се сторнира на касата.'
         );
       }
+      const items = this.buildSaleItems(cartItems);
+      const totalAmount = items
+        .filter((i) => i.type === 'sale')
+        .reduce(
+          (s, i) => s + (Number(i.unitPrice) || 0) * (Number(i.quantity) || 1),
+          0
+        );
+      const paymentType = this.mapPaymentType(originalBill.paymentMode);
+      const fiscalReason = this.mapStornoReasonToFiscalCode(reason);
+      const operatorCode = String(operator.code || this.operator).replace(/\D/g, '').padStart(4, '0').slice(-4);
+      const operatorPassword = String(operator.password || this.operatorPassword);
+      const printerId = await this.resolvePrinterId();
+      const deviceSerial = await this.requireSerial(printerId);
+      const code = this.deviceCode(deviceSerial);
+      const uniqueSaleNumber = this.buildUniqueSaleNumber(
+        code,
+        operatorCode,
+        await this.nextUnpDocNumber(code)
+      );
 
       const payload = {
         uniqueSaleNumber,
-        operator: String(this.operator),
-        operatorPassword: String(this.operatorPassword),
+        operator: operatorCode,
+        operatorPassword,
         receiptNumber: originalBill.fiscalReceiptId,
         receiptDateTime: originalBill.fiscalReceiptDateTime,
         fiscalMemorySerialNumber: originalBill.fiscalMemorySerialNumber,
@@ -401,10 +337,16 @@ class FiscalService {
         payload
       );
       this.assertOk(result, 'Print reversal');
+      if (!result.receiptNumber) {
+        throw new Error('Фискалното устройство не върна номер на сторно бона');
+      }
 
       return {
         success: true,
         fiscalReceiptId: result.receiptNumber,
+        uniqueSaleNumber,
+        fiscalMemorySerialNumber: result.fiscalMemorySerialNumber,
+        fiscalDeviceSerialNumber: code,
         timestamp: result.receiptDateTime
           ? new Date(result.receiptDateTime)
           : new Date(),
@@ -418,9 +360,6 @@ class FiscalService {
   }
 
   async printXReport() {
-    if (this.isTestMode) {
-      return { ok: true, testMode: true, message: 'X report (test mode)' };
-    }
     const printerId = await this.resolvePrinterId();
     const result = await this.httpJson(
       'POST',
@@ -432,14 +371,6 @@ class FiscalService {
   }
 
   async printZReport() {
-    if (this.isTestMode) {
-      return {
-        ok: true,
-        testMode: true,
-        fiscalReportId: `TEST-Z-${Date.now()}`,
-        message: 'Z report (test mode)',
-      };
-    }
     const printerId = await this.resolvePrinterId();
     const result = await this.httpJson(
       'POST',
@@ -451,75 +382,7 @@ class FiscalService {
   }
 
   async checkForNewZReport() {
-    try {
-      if (this.isTestMode) {
-        const now = new Date();
-        const startOfDay = new Date(
-          now.getFullYear(),
-          now.getMonth(),
-          now.getDate()
-        );
-        const existingReport = await Report.findOne({
-          type: 'Z',
-          from: startOfDay,
-          to: { $gte: startOfDay, $lte: now },
-          isTestMode: true,
-        });
-        if (!existingReport) {
-          const newReport = new Report({
-            type: 'Z',
-            from: startOfDay,
-            to: now,
-            totalAmount: 0,
-            totalBills: 0,
-            byPayment: {},
-            items: {},
-            bills: [],
-            isSynchronized: true,
-            synchronizedAt: new Date(),
-            isTestMode: true,
-            fiscalReportId: `TEST-${Date.now()}`,
-          });
-          await newReport.save();
-          console.log('Създаден тестов Z отчет:', newReport._id);
-          return newReport;
-        }
-      }
-      return null;
-    } catch (error) {
-      console.error('Грешка при проверка за нов Z отчет:', error);
-      throw error;
-    }
-  }
-
-  async synchronizeZReport(reportId) {
-    try {
-      const report = await Report.findById(reportId);
-      if (!report) {
-        throw new Error('Отчетът не е намерен');
-      }
-      if (this.isTestMode) {
-        report.isSynchronized = true;
-        report.synchronizedAt = new Date();
-        report.isTestMode = true;
-        await report.save();
-        return report;
-      }
-
-      const deviceResult = await this.printZReport();
-      report.isSynchronized = true;
-      report.synchronizedAt = new Date();
-      report.isTestMode = false;
-      report.fiscalReportId =
-        deviceResult.fiscalReportId ||
-        deviceResult.receiptNumber ||
-        `FP-Z-${Date.now()}`;
-      await report.save();
-      return report;
-    } catch (error) {
-      console.error('Грешка при синхронизация на Z отчет:', error);
-      throw error;
-    }
+    return null;
   }
 }
 

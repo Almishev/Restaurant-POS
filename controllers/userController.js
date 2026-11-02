@@ -28,6 +28,15 @@ const loginController = async (req, res) => {
       user = matches[0];
     }
     if (user) {
+      const { writeAudit } = require("../services/auditService");
+      await writeAudit({
+        action: "login",
+        userId: user.userId,
+        userName: user.name,
+        entity: "user",
+        entityId: user._id,
+        detail: user.role,
+      });
       res.status(200).json({
         name: user.name,
         userId: user.userId,
@@ -58,6 +67,15 @@ const registerController = async (req, res) => {
     const newUser = new userModal({ ...req.body, verified: true });
     console.log("[REGISTER] Създаден нов user обект:", newUser);
     await newUser.save();
+    const { writeAudit } = require("../services/auditService");
+    await writeAudit({
+      action: "user-change",
+      userId: req.authUser?.userId || "",
+      userName: req.authUser?.name || "",
+      entity: "user",
+      entityId: newUser._id,
+      detail: `създаден ${newUser.userId}`,
+    });
     console.log("[REGISTER] User успешно записан в базата!");
     res.status(201).send("new User added Successfully!");
   } catch (error) {
@@ -69,7 +87,7 @@ const registerController = async (req, res) => {
 // Връща всички потребители (за отчети и администрация)
 const getUsersController = async (req, res) => {
   try {
-    const users = await userModal.find();
+    const users = await userModal.find().select("-fiscalOperatorPassword");
     res.json(users);
   } catch (error) {
     res.status(500).json({ message: "Грешка при зареждане на потребителите!" });
@@ -80,7 +98,20 @@ const getUsersController = async (req, res) => {
 const updateUserController = async (req, res) => {
   try {
     const { id } = req.params;
-    await userModal.findByIdAndUpdate(id, req.body);
+    const previous = await userModal.findById(id).lean();
+    const patch = { ...req.body };
+    if (!patch.password) delete patch.password;
+    if (!patch.fiscalOperatorPassword) delete patch.fiscalOperatorPassword;
+    await userModal.findByIdAndUpdate(id, patch);
+    const { writeAudit } = require("../services/auditService");
+    await writeAudit({
+      action: "user-change",
+      userId: req.authUser?.userId || "",
+      userName: req.authUser?.name || "",
+      entity: "user",
+      entityId: id,
+      detail: `обновен ${previous?.userId || id}`,
+    });
     res.status(200).json({ message: "Потребителят е обновен успешно!" });
   } catch (error) {
     console.log(error);

@@ -26,6 +26,14 @@ const billSchema = mongoose.Schema(
       type: String,
       required: true,
     },
+    cashReceived: {
+      type: Number,
+      required: false,
+    },
+    cashChange: {
+      type: Number,
+      required: false,
+    },
     hotelBookingId: {
       type: String,
       required: false,
@@ -35,6 +43,15 @@ const billSchema = mongoose.Schema(
       required: false,
     },
     hotelGuestName: {
+      type: String,
+      required: false,
+    },
+    hotelPostStatus: {
+      type: String,
+      enum: ["", "pending", "posted"],
+      default: "",
+    },
+    hotelPostError: {
       type: String,
       required: false,
     },
@@ -74,6 +91,15 @@ const billSchema = mongoose.Schema(
       default: false,
     },
     shiftReportId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Report",
+      required: false,
+    },
+    includedInXReport: {
+      type: Boolean,
+      default: false,
+    },
+    xReportId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Report",
       required: false,

@@ -158,7 +158,14 @@ const UsersPage = () => {
               <Option value="admin">Администратор</Option>
               <Option value="bar">Бар</Option>
               <Option value="kitchen">Кухня</Option>
+              <Option value="auditor">Одитор</Option>
             </Select>
+          </Form.Item>
+          <Form.Item name="fiscalOperatorCode" label="Код на оператор (4 цифри)">
+            <Input maxLength={4} />
+          </Form.Item>
+          <Form.Item name="fiscalOperatorPassword" label="Парола за фискално устройство">
+            <Input.Password />
           </Form.Item>
           <div className="d-flex justify-content-end">
             <Button type="primary" htmlType="submit">

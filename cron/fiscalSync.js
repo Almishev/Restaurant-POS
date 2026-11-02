@@ -15,28 +15,3 @@ cron.schedule('5 0 * * *', async () => {
     console.error('Грешка при автоматична синхронизация на Z отчет:', error);
   }
 });
-
-// Проверка на статуса на синхронизация всеки час
-cron.schedule('0 * * * *', async () => {
-  console.log('Проверка на статуса на синхронизация...');
-  try {
-    const unsynchronizedReports = await Report.find({
-      type: 'Z',
-      isSynchronized: false,
-      createdAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) } // последните 24 часа
-    });
-
-    for (const report of unsynchronizedReports) {
-      try {
-        await fiscalService.synchronizeZReport(report._id);
-        console.log('Отчет синхронизиран успешно:', report._id);
-      } catch (error) {
-        console.error('Грешка при синхронизация на отчет:', report._id, error);
-        report.syncError = error.message;
-        await report.save();
-      }
-    }
-  } catch (error) {
-    console.error('Грешка при проверка на статуса на синхронизация:', error);
-  }
-}); 

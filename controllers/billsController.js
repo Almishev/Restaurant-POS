@@ -8,6 +8,8 @@ const { buildSalesReport, buildByHour, isRoomCharge } = require("../utils/buildS
 const Item = require("../models/itemModel");
 const Storno = require("../models/stornoModel");
 const mongoose = require("mongoose");
+const { writeAudit } = require("../services/auditService");
+const { resolveOperator } = require("../services/operatorService");
 
 async function resolveReportUserFilter(userId) {
   if (!userId) return null;
@@ -111,95 +113,192 @@ async function deductInventory(cartItems, userId) {
   }
 }
 
-async function addRoomBill(req, res) {
-  const bookingId = req.body.hotelBookingId;
-  const amount = Number(req.body.totalAmount);
-  if (!bookingId) {
-    return res.status(400).json({ message: "Изберете стая" });
-  }
-  if (!Number.isFinite(amount) || amount <= 0) {
-    return res.status(400).json({ message: "Сумата трябва да е по-голяма от нула" });
-  }
+async function withTaxGroups(cartItems) {
+  const ids = (cartItems || []).map((item) => item._id).filter(Boolean);
+  const stored = ids.length ? await Item.find({ _id: { $in: ids } }).lean() : [];
+  const taxById = {};
+  stored.forEach((item) => {
+    taxById[String(item._id)] = item.taxGroup;
+  });
+  return (cartItems || []).map((item) => ({
+    ...item,
+    taxGroup: Number(item.taxGroup) || taxById[String(item._id)] || undefined,
+  }));
+}
 
-  const billId = new mongoose.Types.ObjectId();
-  try {
-    await hotelPmsService.postRoomCharge({
-      bookingId,
-      billId: String(billId),
-      tableName: req.body.tableName || req.body.customerName || "",
-      amount,
-    });
-  } catch (error) {
-    return res.status(error.status || 502).json({
-      message: error.message || "Хотелът не е свързан",
-    });
-  }
-
-  try {
-    const newBill = new billsModel({
-      ...req.body,
-      _id: billId,
-      paymentMode: "На стая",
-      fiscalStatus: "n/a",
-      hotelBookingId: String(bookingId),
-      hotelRoomNumber: req.body.hotelRoomNumber || "",
-      hotelGuestName: req.body.hotelGuestName || "",
-    });
-    await newBill.save();
-    try {
-      await deductInventory(req.body.cartItems, req.body.userId);
-    } catch (inventoryError) {
-      console.log("[BILL] Inventory error:", inventoryError);
-    }
-    return res.send("Bill Created Successfully!");
-  } catch (error) {
-    console.log("[BILL] Room charge save failed:", error);
-    try {
-      await hotelPmsService.stornoRoomCharge(String(billId), amount, `rollback-${billId}`);
-    } catch (rollbackError) {
-      console.log("[BILL] Hotel rollback failed:", rollbackError.message);
-    }
-    return res.status(500).json({
-      message: "Сметката не беше записана и качването към стаята е отменено",
-    });
-  }
+async function pushRoomCharge(bill) {
+  await hotelPmsService.postRoomCharge({
+    bookingId: bill.hotelBookingId,
+    billId: String(bill._id),
+    tableName: bill.tableName || bill.customerName || "",
+    amount: bill.totalAmount,
+    uniqueSaleNumber: bill.uniqueSaleNumber,
+    fiscalReceiptId: bill.fiscalReceiptId,
+    fiscalReceiptDateTime: bill.fiscalReceiptDateTime,
+    fiscalMemorySerialNumber: bill.fiscalMemorySerialNumber,
+    fiscalDeviceSerialNumber: bill.fiscalDeviceSerialNumber,
+  });
 }
 
 const addBillsController = async (req, res) => {
   try {
-    if (isRoomCharge(req.body.paymentMode)) {
-      return await addRoomBill(req, res);
+    const roomCharge = isRoomCharge(req.body.paymentMode);
+    const amount = Number(req.body.totalAmount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return res.status(400).json({ message: "Сумата трябва да е по-голяма от нула" });
+    }
+    if (roomCharge) {
+      if (!hotelPmsService.isConfigured()) {
+        return res.status(400).json({ message: "Плащане «На стая» не е включено" });
+      }
+      if (!req.body.hotelBookingId) {
+        return res.status(400).json({ message: "Изберете стая" });
+      }
+    }
+
+    const paymentType = fiscalService.mapPaymentType(roomCharge ? "На стая" : req.body.paymentMode);
+    let cashReceived;
+    let cashChange;
+    if (paymentType === "cash") {
+      const raw = req.body.cashReceived;
+      if (raw === undefined || raw === null || raw === "") {
+        cashReceived = amount;
+        cashChange = 0;
+      } else {
+        cashReceived = Math.round(Number(raw) * 100) / 100;
+        if (!Number.isFinite(cashReceived) || cashReceived + 0.001 < amount) {
+          return res.status(400).json({ message: "Получените пари са по-малко от сметката" });
+        }
+        cashChange = Math.round((cashReceived - amount) * 100) / 100;
+      }
+    }
+
+    const fiscalStatus = await fiscalService.getStatus();
+    if (!fiscalStatus.ok) {
+      return res.status(503).json({
+        message: fiscalStatus.error || "Фискалното устройство не отговаря",
+      });
+    }
+
+    const cartItems = await withTaxGroups(req.body.cartItems);
+    const billId = new mongoose.Types.ObjectId();
+    const operator = await resolveOperator(req.body.userId);
+    const draft = {
+      ...req.body,
+      _id: billId,
+      cartItems,
+      paymentMode: roomCharge ? "На стая" : req.body.paymentMode,
+      fiscalStatus: "pending",
+      hotelBookingId: roomCharge ? String(req.body.hotelBookingId) : undefined,
+      hotelRoomNumber: roomCharge ? req.body.hotelRoomNumber || "" : undefined,
+      hotelGuestName: roomCharge ? req.body.hotelGuestName || "" : undefined,
+      cashReceived,
+      cashChange,
+    };
+
+    let fiscalResult;
+    try {
+      fiscalResult = await fiscalService.printReceipt(draft, operator);
+    } catch (fiscalError) {
+      console.log("[BILL] Fiscal error:", fiscalError);
+      return res.status(502).json({
+        message: fiscalError.message || "Фискалното устройство отказа бона",
+      });
     }
 
     const newBill = new billsModel({
-      ...req.body,
-      fiscalStatus: "pending",
+      ...draft,
+      fiscalReceiptId: fiscalResult.fiscalReceiptId,
+      fiscalReceiptDateTime: fiscalResult.receiptDateTime,
+      fiscalMemorySerialNumber: fiscalResult.fiscalMemorySerialNumber,
+      fiscalDeviceSerialNumber: fiscalResult.fiscalDeviceSerialNumber,
+      uniqueSaleNumber: fiscalResult.uniqueSaleNumber,
+      fiscalStatus: "completed",
+      hotelPostStatus: roomCharge ? "pending" : "",
     });
-    await newBill.save();
-    await deductInventory(req.body.cartItems, req.body.userId);
 
     try {
-      const fiscalResult = await fiscalService.printReceipt(newBill);
-      newBill.fiscalReceiptId = fiscalResult.fiscalReceiptId;
-      newBill.fiscalReceiptDateTime = fiscalResult.receiptDateTime;
-      newBill.fiscalMemorySerialNumber = fiscalResult.fiscalMemorySerialNumber;
-      newBill.fiscalDeviceSerialNumber = fiscalResult.fiscalDeviceSerialNumber;
-      newBill.uniqueSaleNumber = fiscalResult.uniqueSaleNumber;
-      newBill.fiscalStatus = "completed";
-      newBill.fiscalErrorMessage = undefined;
       await newBill.save();
-    } catch (fiscalError) {
-      console.log("[BILL] Fiscal error:", fiscalError);
-      newBill.fiscalStatus = "error";
-      newBill.fiscalErrorMessage =
-        fiscalError.message || "Грешка при фискализация";
-      await newBill.save();
+    } catch (error) {
+      console.log("[BILL] Save failed after fiscal receipt:", error);
+      try {
+        await fiscalService.printStornoBon(
+          newBill,
+          `rollback-${billId}`,
+          "operatorError",
+          cartItems,
+          operator
+        );
+      } catch (rollbackError) {
+        console.log("[BILL] Fiscal rollback failed:", rollbackError.message);
+      }
+      return res.status(500).json({
+        message: "Сметката не беше записана и фискалният бон е сторниран",
+      });
     }
 
-    res.send("Bill Created Successfully!");
+    try {
+      await deductInventory(cartItems, req.body.userId);
+    } catch (inventoryError) {
+      console.log("[BILL] Inventory error:", inventoryError);
+    }
+
+    await writeAudit({
+      action: "sale",
+      userId: operator.userId,
+      userName: operator.name,
+      entity: "bill",
+      entityId: newBill._id,
+      detail: `${newBill.paymentMode} ${newBill.uniqueSaleNumber} €${amount.toFixed(2)}`,
+    });
+
+    if (!roomCharge) {
+      return res.send("Bill Created Successfully!");
+    }
+
+    try {
+      await pushRoomCharge(newBill);
+      newBill.hotelPostStatus = "posted";
+      newBill.hotelPostError = undefined;
+      await newBill.save();
+      return res.send("Bill Created Successfully!");
+    } catch (error) {
+      newBill.hotelPostStatus = "pending";
+      newBill.hotelPostError = error.message || "Хотелът не прие сметката";
+      await newBill.save();
+      return res.status(201).json({
+        message: "Бонът е издаден. Качването към стаята не мина и може да се повтори.",
+        billId: String(newBill._id),
+        hotelPostStatus: "pending",
+      });
+    }
   } catch (error) {
-    res.send("something went wrong");
     console.log(error);
+    return res.status(500).json({ message: "something went wrong" });
+  }
+};
+
+const retryHotelPostController = async (req, res) => {
+  try {
+    const bill = await billsModel.findById(req.params.id);
+    if (!bill || !isRoomCharge(bill.paymentMode)) {
+      return res.status(404).json({ message: "Сметката към стая не е намерена" });
+    }
+    if (bill.hotelPostStatus === "posted") {
+      return res.json({ message: "Сметката вече е качена", hotelPostStatus: "posted" });
+    }
+    if (!hotelPmsService.isConfigured()) {
+      return res.status(400).json({ message: "Плащане «На стая» не е включено" });
+    }
+    await pushRoomCharge(bill);
+    bill.hotelPostStatus = "posted";
+    bill.hotelPostError = undefined;
+    await bill.save();
+    return res.json({ message: "Сметката е качена към стаята", hotelPostStatus: "posted" });
+  } catch (error) {
+    return res.status(error.status || 502).json({
+      message: error.message || "Хотелът не прие сметката",
+    });
   }
 };
 
@@ -267,6 +366,7 @@ const getReportController = async (req, res) => {
 
     filter.isStornoed = { $ne: true };
     filter.includedInShiftReport = { $ne: true };
+    filter.includedInXReport = { $ne: true };
     const bills = await billsModel.find(filter);
 
     const base = buildSalesReport(bills);
@@ -284,6 +384,7 @@ const getReportController = async (req, res) => {
     }
     if (resolvedUserId) stornoQuery.userId = resolvedUserId;
     stornoQuery.includedInShiftReport = { $ne: true };
+    stornoQuery.includedInXReport = { $ne: true };
     const stornoDocs = await Storno.find(stornoQuery).sort({ createdAt: -1 }).lean();
     const preBillStornos = stornoDocs.filter((s) => s.type === "pre_bill");
     const billStornos = stornoDocs.filter((s) => s.type !== "pre_bill");
@@ -337,9 +438,23 @@ const createZReportController = async (req, res) => {
 
     const bills = await billsModel.find(filter);
     const roomBills = bills.filter((bill) => isRoomCharge(bill.paymentMode));
-    const fiscalBills = bills.filter((bill) => !isRoomCharge(bill.paymentMode));
     const roomAmount = roomBills.reduce((sum, bill) => sum + (Number(bill.totalAmount) || 0), 0);
-    const { totalAmount, totalBills, byPayment, items } = buildSalesReport(fiscalBills);
+    const { totalAmount, totalBills, byPayment, items } = buildSalesReport(bills);
+
+    let deviceZ;
+    try {
+      deviceZ = await fiscalService.printZReport();
+    } catch (fiscalZErr) {
+      return res.status(502).json({
+        message: fiscalZErr.message || "Фискалното устройство отказа Z отчета",
+      });
+    }
+    const fiscalReportId = deviceZ.fiscalReportId || deviceZ.receiptNumber;
+    if (!fiscalReportId) {
+      return res.status(502).json({
+        message: "Фискалното устройство не върна номер на Z отчета",
+      });
+    }
 
     const report = await saveReportWithNumber({
       type: "Z",
@@ -351,12 +466,16 @@ const createZReportController = async (req, res) => {
       netAmount: totalAmount,
       byPayment,
       items,
-      bills: fiscalBills,
+      bills,
       roomAmount,
       roomBillCount: roomBills.length,
+      isSynchronized: true,
+      synchronizedAt: new Date(),
+      isTestMode: false,
+      fiscalReportId,
     });
 
-    const billIds = fiscalBills.map((b) => b._id);
+    const billIds = bills.map((b) => b._id);
     if (billIds.length) {
       await billsModel.updateMany(
         { _id: { $in: billIds } },
@@ -364,28 +483,14 @@ const createZReportController = async (req, res) => {
       );
     }
 
-    // Optional: print Z on fiscal device when not in test mode
-    try {
-      if (!fiscalService.isTestMode) {
-        const deviceZ = await fiscalService.printZReport();
-        report.isSynchronized = true;
-        report.synchronizedAt = new Date();
-        report.isTestMode = false;
-        report.fiscalReportId =
-          deviceZ.fiscalReportId || deviceZ.receiptNumber || `FP-Z-${Date.now()}`;
-        await report.save();
-      } else {
-        report.isSynchronized = true;
-        report.synchronizedAt = new Date();
-        report.isTestMode = true;
-        report.fiscalReportId = report.fiscalReportId || `TEST-Z-${Date.now()}`;
-        await report.save();
-      }
-    } catch (fiscalZErr) {
-      console.log("[Z] Device Z print error:", fiscalZErr.message);
-      report.isSynchronized = false;
-      await report.save();
-    }
+    await writeAudit({
+      action: "z-report",
+      userId: req.authUser?.userId || userId || "",
+      userName: req.authUser?.name || "",
+      entity: "report",
+      entityId: report._id,
+      detail: report.fiscalReportId || "",
+    });
 
     res.json(report);
   } catch (error) {
@@ -491,9 +596,152 @@ const closeShiftController = async (req, res) => {
   }
 };
 
+function formatXReportCode(date, sequence) {
+  const pad = (value) => String(value).padStart(2, "0");
+  const stamp = [
+    date.getFullYear(),
+    pad(date.getMonth() + 1),
+    pad(date.getDate()),
+    pad(date.getHours()),
+    pad(date.getMinutes()),
+    pad(date.getSeconds()),
+  ].join("");
+  return `${stamp}-${sequence}`;
+}
+
+async function allocateXReportCode(userId, moment) {
+  const dayStart = new Date(moment.getFullYear(), moment.getMonth(), moment.getDate());
+  const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
+  let sequence = (await Report.countDocuments({
+    type: "X",
+    userId,
+    createdAt: { $gte: dayStart, $lt: dayEnd },
+  })) + 1;
+  let reportCode = formatXReportCode(moment, sequence);
+  while (await Report.exists({ reportCode })) {
+    sequence += 1;
+    reportCode = formatXReportCode(moment, sequence);
+  }
+  return reportCode;
+}
+
+const submitXReportController = async (req, res) => {
+  try {
+    const isAdmin = req.authUser?.role === "admin";
+    const userId = isAdmin ? req.body.userId : req.authUser?.userId;
+    if (!userId) {
+      return res.status(400).json({ message: "Избери сервитьор!" });
+    }
+
+    const User = require("../models/userModel");
+    const waiter = await User.findOne({ userId: String(userId) });
+    if (!waiter) {
+      return res.status(404).json({ message: "Сервитьорът не е намерен" });
+    }
+
+    const filter = {
+      isStornoed: { $ne: true },
+      includedInXReport: { $ne: true },
+      userId: waiter.userId,
+    };
+    const stornoQuery = {
+      includedInXReport: { $ne: true },
+      userId: waiter.userId,
+    };
+    const bills = await billsModel.find(filter);
+    const stornoDocs = await Storno.find(stornoQuery).sort({ createdAt: -1 }).lean();
+    if (!bills.length && !stornoDocs.length) {
+      return res.status(400).json({ message: "Няма непредадени сметки." });
+    }
+
+    const now = new Date();
+    const times = [
+      ...bills.map((bill) => new Date(bill.date).getTime()),
+      ...stornoDocs.map((item) => new Date(item.createdAt).getTime()),
+    ].filter((time) => !Number.isNaN(time));
+    const from = new Date(Math.min(...times));
+    const roomBills = bills.filter((bill) => isRoomCharge(bill.paymentMode));
+    const { totalAmount, totalBills, byPayment, items } = buildSalesReport(bills);
+    const stornoAmount = stornoDocs.reduce((sum, item) => sum + (Number(item.totalAmount) || 0), 0);
+    const preBillStornos = stornoDocs.filter((item) => item.type === "pre_bill");
+    const billStornos = stornoDocs.filter((item) => item.type !== "pre_bill");
+    let byCategory = {};
+    try {
+      byCategory = await buildCategoryBreakdown(bills);
+    } catch (categoryError) {
+      console.log("[SUBMIT X] Category breakdown skipped:", categoryError.message);
+    }
+
+    const reportCode = await allocateXReportCode(waiter.userId, now);
+    const report = new Report({
+      type: "X",
+      reportCode,
+      from,
+      to: now,
+      userId: waiter.userId,
+      userName: waiter.name || waiter.userId,
+      totalAmount,
+      totalBills,
+      stornoAmount,
+      netAmount: totalAmount - stornoAmount,
+      byPayment,
+      items,
+      bills,
+      stornos: stornoDocs,
+      roomAmount: roomBills.reduce((sum, bill) => sum + (Number(bill.totalAmount) || 0), 0),
+      roomBillCount: roomBills.length,
+    });
+    try {
+      await report.save();
+    } catch (error) {
+      if (error && error.code === 11000) {
+        return res.status(409).json({ message: "Номерът се застъпи. Предай отчета отново." });
+      }
+      throw error;
+    }
+
+    const billIds = bills.map((bill) => bill._id);
+    if (billIds.length) {
+      await billsModel.updateMany(
+        { _id: { $in: billIds } },
+        { $set: { includedInXReport: true, xReportId: report._id } }
+      );
+    }
+    const stornoIds = stornoDocs.map((item) => item._id);
+    if (stornoIds.length) {
+      await Storno.updateMany(
+        { _id: { $in: stornoIds } },
+        { $set: { includedInXReport: true, xReportId: report._id } }
+      );
+    }
+
+    await writeAudit({
+      action: "x-handover",
+      userId: req.authUser?.userId || "",
+      userName: req.authUser?.name || "",
+      entity: "report",
+      entityId: report._id,
+      detail: report.reportCode,
+    });
+
+    res.json({
+      ...report.toObject(),
+      preBillStornos,
+      billStornos,
+      byCategory,
+      byHour: buildByHour(bills),
+      stornoAmount,
+      netAmount: totalAmount - stornoAmount,
+    });
+  } catch (error) {
+    console.log(`[SUBMIT X] ${error.message}`);
+    res.status(500).json({ message: "Грешка при предаване на X отчета!", error: error.message });
+  }
+};
+
 const getZReportsController = async (req, res) => {
   try {
-    const reports = await Report.find({ type: { $in: ["Z", "shift"] } }).sort({ createdAt: -1 });
+    const reports = await Report.find({ type: { $in: ["Z", "shift", "X"] } }).sort({ createdAt: -1 });
     res.json(reports);
   } catch (error) {
     res
@@ -546,20 +794,9 @@ const checkZReportController = async (req, res) => {
 };
 
 const syncZReportController = async (req, res) => {
-  try {
-    const { reportId } = req.params;
-    const existing = await Report.findById(reportId);
-    if (existing && existing.type === "shift") {
-      return res.status(400).json({ message: "Смяната не се синхронизира с фискалния принтер" });
-    }
-    const report = await fiscalService.synchronizeZReport(reportId);
-    res.json(report);
-  } catch (error) {
-    res.status(500).json({
-      message: "Грешка при синхронизация на Z отчет!",
-      error: error.message,
-    });
-  }
+  res.status(410).json({
+    message: "Отчетът не се изпраща към НАП от програмата. Z се печата на фискалното устройство при архивиране.",
+  });
 };
 
 const getBillByIdController = async (req, res) => {
@@ -633,13 +870,34 @@ const getDashboardController = async (req, res) => {
 const getFiscalStatusController = async (req, res) => {
   try {
     const status = await fiscalService.getStatus();
-    res.json(status);
+    const pkg = require("../package.json");
+    res.json({
+      ...status,
+      softwareName: "PirinPixel restaurant",
+      softwareVersion: pkg.version,
+    });
   } catch (error) {
     res.status(500).json({
       ok: false,
       message: "Грешка при проверка на фискалния статус",
       error: error.message,
     });
+  }
+};
+
+const printXReportController = async (req, res) => {
+  try {
+    const result = await fiscalService.printXReport();
+    await writeAudit({
+      action: "x-report",
+      userId: req.authUser?.userId || "",
+      userName: req.authUser?.name || "",
+      entity: "report",
+      detail: result.receiptNumber || result.message || "X",
+    });
+    res.json(result);
+  } catch (error) {
+    res.status(502).json({ message: error.message || "Фискалното устройство отказа X отчета" });
   }
 };
 
@@ -699,6 +957,9 @@ const getInventoryReportController = async (req, res) => {
 
 const getOpenRoomsController = async (req, res) => {
   try {
+    if (!hotelPmsService.isConfigured()) {
+      return res.status(404).json({ message: "Плащане «На стая» не е включено" });
+    }
     const rooms = await hotelPmsService.getOpenRooms();
     res.json(rooms);
   } catch (error) {
@@ -708,13 +969,128 @@ const getOpenRoomsController = async (req, res) => {
   }
 };
 
+const getHotelLinkController = async (req, res) => {
+  res.json({ enabled: hotelPmsService.isConfigured() });
+};
+
+function csvCell(value) {
+  const text = value == null ? "" : String(value);
+  if (/[",\n]/.test(text)) return `"${text.replace(/"/g, '""')}"`;
+  return text;
+}
+
+const getNapExportController = async (req, res) => {
+  try {
+    const from = req.query.from ? new Date(req.query.from) : new Date(Date.now() - 864e5);
+    const to = req.query.to ? new Date(req.query.to) : new Date();
+    const bills = await billsModel
+      .find({
+        fiscalStatus: "completed",
+        createdAt: { $gte: from, $lte: to },
+      })
+      .lean();
+    const stornos = await Storno.find({
+      type: "bill",
+      fiscalStatus: "completed",
+      createdAt: { $gte: from, $lte: to },
+    }).lean();
+    const billById = {};
+    bills.forEach((bill) => {
+      billById[String(bill._id)] = bill;
+    });
+    const rows = bills.map((bill) => ({
+      kind: "sale",
+      datetime: bill.createdAt,
+      uniqueSaleNumber: bill.uniqueSaleNumber || "",
+      fiscalReceiptId: bill.fiscalReceiptId || "",
+      fiscalMemorySerialNumber: bill.fiscalMemorySerialNumber || "",
+      fiscalDeviceSerialNumber: bill.fiscalDeviceSerialNumber || "",
+      operator: bill.userId || "",
+      paymentMode: bill.paymentMode || "",
+      totalAmount: bill.totalAmount,
+      items: (bill.cartItems || []).map((item) => ({
+        name: item.name,
+        quantity: item.quantity,
+        price: item.price,
+        taxGroup: item.taxGroup,
+      })),
+      storno: false,
+      originalUniqueSaleNumber: "",
+    }));
+    stornos.forEach((storno) => {
+      const original = billById[String(storno.originalBillId)];
+      rows.push({
+        kind: "storno",
+        datetime: storno.createdAt,
+        uniqueSaleNumber: storno.uniqueSaleNumber || "",
+        fiscalReceiptId: storno.fiscalReceiptId || "",
+        fiscalMemorySerialNumber: storno.fiscalMemorySerialNumber || "",
+        fiscalDeviceSerialNumber: storno.fiscalDeviceSerialNumber || "",
+        operator: storno.userId || "",
+        paymentMode: storno.paymentMode || "",
+        totalAmount: storno.totalAmount,
+        items: (storno.cartItems || []).map((item) => ({
+          name: item.name,
+          quantity: item.quantity,
+          price: item.price,
+          taxGroup: item.taxGroup,
+        })),
+        storno: true,
+        originalUniqueSaleNumber: original?.uniqueSaleNumber || "",
+      });
+    });
+
+    await writeAudit({
+      action: "nap-export",
+      userId: req.authUser?.userId || "",
+      userName: req.authUser?.name || "",
+      entity: "export",
+      detail: `${from.toISOString()} ${to.toISOString()}`,
+    });
+
+    if (String(req.query.format || "").toLowerCase() === "csv") {
+      const header = [
+        "kind",
+        "datetime",
+        "uniqueSaleNumber",
+        "fiscalReceiptId",
+        "fiscalMemorySerialNumber",
+        "fiscalDeviceSerialNumber",
+        "operator",
+        "paymentMode",
+        "totalAmount",
+        "items",
+        "storno",
+        "originalUniqueSaleNumber",
+      ];
+      const lines = [header.join(",")];
+      rows.forEach((row) => {
+        lines.push(
+          header
+            .map((key) => csvCell(key === "items" ? JSON.stringify(row.items) : row[key]))
+            .join(",")
+        );
+      });
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      return res.send(`\uFEFF${lines.join("\n")}`);
+    }
+    return res.json({ from, to, rows });
+  } catch (error) {
+    return res.status(500).json({ message: "Грешка при експорт", error: error.message });
+  }
+};
+
 module.exports = {
   addBillsController,
   getBillsController,
   getOpenRoomsController,
+  retryHotelPostController,
+  getHotelLinkController,
+  getNapExportController,
   getReportController,
   createZReportController,
   closeShiftController,
+  submitXReportController,
   getZReportsController,
   getZReportByIdController,
   getUnsynchronizedReportsController,
@@ -724,4 +1100,5 @@ module.exports = {
   getDashboardController,
   getInventoryReportController,
   getFiscalStatusController,
+  printXReportController,
 };

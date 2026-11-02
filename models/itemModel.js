@@ -19,6 +19,10 @@ const itemSchema = mongoose.Schema(
       enum: ["kitchen", "bar"],
       required: true,
     },
+    taxGroup: {
+      type: Number,
+      default: 2,
+    },
   },
   { timestamp: true }
 );

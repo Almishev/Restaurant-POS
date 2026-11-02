@@ -106,6 +106,21 @@ body {
   max-width: 420px;
 }
 
+.software-corner {
+  position: fixed;
+  right: 16px;
+  bottom: 12px;
+  z-index: 20;
+  font-size: 13px;
+  font-weight: 600;
+  color: rgb(2, 2, 75);
+  pointer-events: none;
+}
+
+.software-corner.above-nav {
+  bottom: 76px;
+}
+
 .pin-display {
   min-height: 64px;
   margin-bottom: 16px;

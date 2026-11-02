@@ -34,6 +34,9 @@ const DefaultLayout = ({ children }) => {
   const { cartItems, loading } = useSelector((state) => state.rootReducer);
   const [collapsed, setCollapsed] = useState(false);
   const [userRole, setUserRole] = useState("");
+  const [fiscalBadge, setFiscalBadge] = useState("");
+  const [softwareName, setSoftwareName] = useState("PirinPixel restaurant");
+  const [softwareVersion, setSoftwareVersion] = useState("");
 
   const toggle = () => {
     setCollapsed(!collapsed);
@@ -50,6 +53,40 @@ const DefaultLayout = ({ children }) => {
       }
     }
   }, []);
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const health = await fetch("/api/health");
+        const healthData = await health.json();
+        if (!cancelled) {
+          if (healthData.name) setSoftwareName(healthData.name);
+          setSoftwareVersion(healthData.version || "");
+        }
+      } catch (error) {
+        if (!cancelled) setSoftwareVersion("");
+      }
+      try {
+        const auth = localStorage.getItem("auth");
+        const parsed = auth ? JSON.parse(auth) : {};
+        const response = await fetch("/api/bills/fiscal-status", {
+          headers: { "x-user-id": parsed.userId || "" },
+        });
+        const data = await response.json();
+        if (cancelled) return;
+        if (data.ok) setFiscalBadge("ФУ: свързано");
+        else setFiscalBadge("ФУ: няма връзка");
+      } catch (error) {
+        if (!cancelled) setFiscalBadge("ФУ: няма връзка");
+      }
+    };
+    load();
+    const timer = setInterval(load, 30000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, []);
   // Persist Redux cart to localStorage only.
   // Do NOT PUT to /update-table-cart here — Homepage owns the table cart in MongoDB.
   useEffect(() => {
@@ -61,7 +98,39 @@ const DefaultLayout = ({ children }) => {
   }, [cartItems]);
 
   const stationOnly = isStationRole(userRole);
-  const showBottomNav = isMobile && !stationOnly;
+  const auditorOnly = userRole === "auditor";
+  const showOps = !stationOnly && !auditorOnly;
+  const showBottomNav = isMobile && showOps;
+
+  const downloadNapExport = async () => {
+    const to = new Date();
+    const from = new Date();
+    from.setDate(from.getDate() - 30);
+    const params = new URLSearchParams({
+      from: from.toISOString(),
+      to: to.toISOString(),
+      format: "csv",
+    });
+    try {
+      const auth = JSON.parse(localStorage.getItem("auth") || "{}");
+      const response = await fetch(`/api/bills/nap-export?${params}`, {
+        headers: { "x-user-id": auth.userId || "" },
+      });
+      if (!response.ok) {
+        message.error("Експортът не беше създаден");
+        return;
+      }
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "nap-export.csv";
+      link.click();
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      message.error("Експортът не беше създаден");
+    }
+  };
 
   return (
     <Layout>
@@ -79,7 +148,7 @@ const DefaultLayout = ({ children }) => {
           mode="inline"
           defaultSelectedKeys={window.location.pathname}
         >
-          {!stationOnly && (
+          {showOps && (
             <Menu.Item key="/" icon={<ProfileOutlined />}>
               <span
                 onClick={() => {
@@ -112,12 +181,12 @@ const DefaultLayout = ({ children }) => {
               <Link to="/categories">Категории</Link>
             </Menu.Item>
           )}
-          {!stationOnly && (
+          {showOps && (
             <Menu.Item key="/tables" icon={<TableOutlined />}>
               <Link to="/tables">Маси</Link>
             </Menu.Item>
           )}
-          {!stationOnly && (
+          {showOps && (
             <Menu.Item key="/kiosk" icon={<QrcodeOutlined />}>
               <Link to="/kiosk">KIOSK</Link>
             </Menu.Item>
@@ -137,14 +206,24 @@ const DefaultLayout = ({ children }) => {
               <Link to="/reports">Отчети</Link>
             </Menu.Item>
           )}
-          {userRole === "admin" && (
+          {(userRole === "admin" || auditorOnly) && (
             <Menu.Item key="/storno-list" icon={<FileDoneOutlined />}>
               <Link to="/storno-list">Сторно Операции</Link>
             </Menu.Item>
           )}
-          {userRole === "admin" && (
+          {(userRole === "admin" || auditorOnly) && (
             <Menu.Item key="/storno-report" icon={<FileSearchOutlined />}>
               <Link to="/storno-report">Отчет Сторно</Link>
+            </Menu.Item>
+          )}
+          {(userRole === "admin" || auditorOnly) && (
+            <Menu.Item key="/reports-archive" icon={<FileSearchOutlined />}>
+              <Link to="/reports-archive">Архивирани отчети</Link>
+            </Menu.Item>
+          )}
+          {(userRole === "admin" || auditorOnly) && (
+            <Menu.Item key="nap-export" icon={<CopyOutlined />} onClick={downloadNapExport}>
+              Експорт CSV
             </Menu.Item>
           )}
           {userRole === "admin" && (
@@ -198,7 +277,8 @@ const DefaultLayout = ({ children }) => {
             </div>
           )}
           
-          <div style={{ marginRight: '20px', color: '#1890ff', fontWeight: 'bold' }}>
+          <div style={{ marginRight: "20px", color: "#1890ff", fontWeight: "bold", textAlign: "right" }}>
+            <div>
             {(() => {
               const userData = localStorage.getItem("auth");
               if (userData) {
@@ -211,6 +291,10 @@ const DefaultLayout = ({ children }) => {
               }
               return "Здравей, Потребител";
             })()}
+            </div>
+            <div style={{ fontSize: 12, fontWeight: 500 }}>
+              {fiscalBadge}
+            </div>
           </div>
         </Header>
         <Content
@@ -225,6 +309,9 @@ const DefaultLayout = ({ children }) => {
           {children}
         </Content>
         {showBottomNav && <MobileBottomNav />}
+        <div className={`software-corner${showBottomNav ? " above-nav" : ""}`}>
+          {softwareName}{softwareVersion ? ` ${softwareVersion}` : ""}
+        </div>
       </Layout>
     </Layout>
   );

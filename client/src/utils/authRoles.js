@@ -1,8 +1,11 @@
 /** Role helpers for login redirect and route access. */
 
+const AUDITOR_PATHS = ["/bills", "/storno-list", "/storno-report", "/reports", "/reports-archive"];
+
 export const getHomePath = (role) => {
   if (role === "bar") return "/bar";
   if (role === "kitchen") return "/kitchen";
+  if (role === "auditor") return "/bills";
   return "/tables";
 };
 
@@ -15,6 +18,9 @@ export const canAccessPath = (role, pathname) => {
 
   if (role === "bar") return isBar;
   if (role === "kitchen") return isKitchen;
+  if (role === "auditor") {
+    return AUDITOR_PATHS.some((path) => pathname === path || pathname.startsWith(`${path}/`));
+  }
 
   // Waiters (user) — no bar/kitchen screens
   if (role === "user" && (isBar || isKitchen)) return false;

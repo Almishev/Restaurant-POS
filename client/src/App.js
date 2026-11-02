@@ -20,8 +20,6 @@ import StornoListPage from "./pages/StornoListPage";
 import StornoReportPage from "./pages/StornoReportPage";
 import DashboardPage from "./pages/DashboardPage";
 import InventoryReportPage from "./pages/InventoryReportPage";
-import { useEffect } from "react";
-import { initCronJobs } from "./utils/cron";
 import { getHomePath, canAccessPath } from "./utils/authRoles";
 
 function HomeRedirect() {
@@ -36,10 +34,6 @@ function HomeRedirect() {
 }
 
 function App() {
-  useEffect(() => {
-    initCronJobs();
-  }, []);
-
   return (
     <>
       <BrowserRouter>
@@ -58,14 +52,14 @@ function App() {
           <Route path="/register" element={<AdminRoute><Register /></AdminRoute>} />
           <Route path="/bar" element={<ProtectedRoute><BarPage /></ProtectedRoute>} />
           <Route path="/reports" element={<ProtectedRoute><ReportsPage /></ProtectedRoute>} />
-          <Route path="/reports-archive" element={<AdminRoute><ReportsArchivePage /></AdminRoute>} />
+          <Route path="/reports-archive" element={<ReviewRoute><ReportsArchivePage /></ReviewRoute>} />
           <Route path="/dashboard" element={<AdminRoute><DashboardPage /></AdminRoute>} />
           <Route path="/inventory-report" element={<AdminRoute><InventoryReportPage /></AdminRoute>} />
           <Route path="/inventory" element={<AdminRoute><InventoryPage /></AdminRoute>} />
           <Route path="/recipe" element={<AdminRoute><RecipePage /></AdminRoute>} />
           <Route path="/users" element={<AdminRoute><UsersPage /></AdminRoute>} />
-          <Route path="/storno-list" element={<AdminRoute><StornoListPage /></AdminRoute>} />
-          <Route path="/storno-report" element={<AdminRoute><StornoReportPage /></AdminRoute>} />
+          <Route path="/storno-list" element={<ReviewRoute><StornoListPage /></ReviewRoute>} />
+          <Route path="/storno-report" element={<ReviewRoute><StornoReportPage /></ReviewRoute>} />
         </Routes>
       </BrowserRouter>
     </>
@@ -94,6 +88,17 @@ export function ProtectedRoute({ children }) {
     return <Navigate to={getHomePath(auth.role)} replace />;
   }
   return children;
+}
+
+export function ReviewRoute({ children }) {
+  const auth = readAuth();
+  if (!auth) {
+    return <Navigate to="/login" replace />;
+  }
+  if (auth.role === "admin" || auth.role === "auditor") {
+    return children;
+  }
+  return <Navigate to={getHomePath(auth.role)} replace />;
 }
 
 export function AdminRoute({ children }) {

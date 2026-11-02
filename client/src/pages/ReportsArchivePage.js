@@ -5,21 +5,16 @@ import {
   Table,
   Button,
   Typography,
-  Tag,
   DatePicker,
   Input,
   Row,
   Col,
   Modal,
-  message,
 } from "antd";
 import {
   EyeOutlined,
   PrinterOutlined,
-  CheckCircleOutlined,
-  CloseCircleOutlined,
   SearchOutlined,
-  SyncOutlined,
 } from "@ant-design/icons";
 import Spinner from "../components/Spinner";
 import { useReactToPrint } from "react-to-print";
@@ -72,7 +67,6 @@ const ReportsArchivePage = () => {
   const [selectedReport, setSelectedReport] = useState(null);
   const [dateRange, setDateRange] = useState([null, null]);
   const [search, setSearch] = useState("");
-  const [syncing, setSyncing] = useState(false);
   const printRef = useRef();
 
   useEffect(() => {
@@ -107,32 +101,17 @@ const ReportsArchivePage = () => {
         (r) =>
           (r.type && r.type.toLowerCase().includes(search.toLowerCase())) ||
           (r.reportNumber && String(r.reportNumber).includes(search)) ||
+          (r.reportCode && String(r.reportCode).includes(search)) ||
+          (r.userName && r.userName.toLowerCase().includes(search.toLowerCase())) ||
           (r.totalAmount && r.totalAmount.toString().includes(search))
       );
     }
     setFilteredReports(filtered);
   }, [dateRange, search, reports]);
 
-  const handleSync = async () => {
-    if (!selectedReport?._id) return;
-    setSyncing(true);
-    try {
-      await reportService.synchronizeReport(selectedReport._id);
-      message.success("Тестов sync: отчетът е маркиран като синхронизиран");
-      const data = await reportService.getReports();
-      const normalized = data.map(normalizeReport);
-      setReports(normalized);
-      const updated = normalized.find((r) => r._id === selectedReport._id);
-      if (updated) setSelectedReport(updated);
-    } catch (e) {
-      message.error(e.response?.data?.message || "Грешка при sync");
-    } finally {
-      setSyncing(false);
-    }
-  };
-
   const reportLabel = (record) => {
     if (!record) return "";
+    if (record.type === "X") return `X отчет ${record.reportCode || ""}`;
     if (record.type === "shift") return `Смяна № ${record.reportNumber || ""}`;
     if (record.reportNumber) return `Z отчет № ${record.reportNumber}`;
     return "Z отчет";
@@ -143,15 +122,14 @@ const ReportsArchivePage = () => {
       title: "№",
       dataIndex: "reportNumber",
       key: "reportNumber",
-      width: 70,
-      render: (value) => value || "—",
+      render: (value, record) => (record.type === "X" ? record.reportCode || "—" : value || "—"),
     },
     {
       title: "Тип",
       dataIndex: "type",
       key: "type",
       width: 90,
-      render: (value) => (value === "shift" ? "Смяна" : value || "Z"),
+      render: (value) => (value === "shift" ? "Смяна" : value === "X" ? "X" : value || "Z"),
     },
     {
       title: "От",
@@ -172,19 +150,10 @@ const ReportsArchivePage = () => {
       render: (v) => formatPrice(v),
     },
     {
-      title: "Синхронизиран",
-      dataIndex: "isSynchronized",
-      key: "isSynchronized",
-      render: (v) =>
-        v ? (
-          <Tag icon={<CheckCircleOutlined />} color="success">
-            Да
-          </Tag>
-        ) : (
-          <Tag icon={<CloseCircleOutlined />} color="error">
-            Не (тестов)
-          </Tag>
-        ),
+      title: "Номер от принтера",
+      dataIndex: "fiscalReportId",
+      key: "fiscalReportId",
+      render: (value, record) => (record.type === "Z" ? value || "—" : "—"),
     },
     {
       title: "Действия",
@@ -221,7 +190,7 @@ const ReportsArchivePage = () => {
     <DefaultLayout>
       <Title level={2}>Архивирани отчети</Title>
       <p style={{ color: "#888", marginBottom: 16 }}>
-        Приключени смени и фискални Z отчети. Фискалният sync е само за Z.
+        Приключени смени, предадени X отчети и фискални Z отчети. X се печата на обикновен принтер. Z се печата на устройството. Програмата не го изпраща към НАП.
       </p>
       <Row gutter={16} style={{ marginBottom: 16 }}>
         <Col>
@@ -257,15 +226,6 @@ const ReportsArchivePage = () => {
         footer={
           selectedReport && (
             <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-              {selectedReport.type !== "shift" && !selectedReport.isSynchronized && (
-                <Button
-                  icon={<SyncOutlined />}
-                  loading={syncing}
-                  onClick={handleSync}
-                >
-                  Тестов sync
-                </Button>
-              )}
               <Button
                 type="primary"
                 icon={<PrinterOutlined />}
@@ -284,7 +244,10 @@ const ReportsArchivePage = () => {
             <div className="info" style={{ textAlign: "center", marginBottom: 12 }}>
               <h2>POS Система</h2>
               <p>{reportLabel(selectedReport)}</p>
-              {selectedReport.fiscalReportId && selectedReport.type !== "shift" && (
+              {selectedReport.type === "X" && selectedReport.userName && (
+                <p>{selectedReport.userName}</p>
+              )}
+              {selectedReport.fiscalReportId && selectedReport.type === "Z" && (
                 <p>Номер от принтера: {selectedReport.fiscalReportId}</p>
               )}
               <p>
@@ -314,16 +277,8 @@ const ReportsArchivePage = () => {
                 Плащане с карта: <b>{formatPrice(selectedReport.byPayment?.card || 0)}</b>
               </p>
               <p>
-                {selectedReport.type === "shift" ? "На стая" : "На стая (извън Z)"}:{" "}
+                {selectedReport.type === "shift" ? "На стая" : "На стая"}:{" "}
                 <b>{formatPrice(selectedReport.roomAmount || 0)}</b>
-              </p>
-              <p>
-                Синхронизиран:{" "}
-                {selectedReport.isSynchronized ? (
-                  <Tag color="success">Да</Tag>
-                ) : (
-                  <Tag color="error">Не</Tag>
-                )}
               </p>
             </div>
             <h4>Разбивка по артикули</h4>

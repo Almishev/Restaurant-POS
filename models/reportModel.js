@@ -4,6 +4,8 @@ const reportSchema = new mongoose.Schema(
   {
     type: { type: String, enum: ["X", "Z", "shift"], required: true },
     reportNumber: { type: Number },
+    reportCode: { type: String },
+    userName: { type: String },
     from: { type: Date, required: true },
     to: { type: Date, required: true },
     userId: { type: String }, // кой е направил отчета (ако е по оператор)
@@ -31,6 +33,10 @@ const reportSchema = new mongoose.Schema(
 reportSchema.index(
   { type: 1, reportNumber: 1 },
   { unique: true, partialFilterExpression: { reportNumber: { $exists: true } } }
+);
+reportSchema.index(
+  { reportCode: 1 },
+  { unique: true, partialFilterExpression: { reportCode: { $type: "string" } } }
 );
 
 const Report = mongoose.model("Report", reportSchema);

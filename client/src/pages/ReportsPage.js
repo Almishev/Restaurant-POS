@@ -66,6 +66,15 @@ const ReportsPage = () => {
       if (selectedUser) params.userId = selectedUser;
       const res = await axios.get("/api/bills/get-report", { params });
       setReport(res.data);
+      if (userRole === "admin") {
+        try {
+          await axios.post("/api/bills/print-x-report");
+        } catch (deviceError) {
+          if (deviceError.response?.status !== 403) {
+            message.warning(deviceError.response?.data?.message || "X отчетът на устройството не беше отпечатан");
+          }
+        }
+      }
     } catch (error) {
       message.error(error.response?.data?.message || "Грешка при зареждане на отчета!");
     }
@@ -94,6 +103,25 @@ const ReportsPage = () => {
     setLoading(false);
   };
 
+  const handleSubmitX = async () => {
+    if (userRole === "admin" && !selectedUser) {
+      message.error("Избери сервитьор!");
+      return;
+    }
+    setLoading(true);
+    try {
+      const body = {};
+      if (selectedUser) body.userId = selectedUser;
+      const res = await axios.post("/api/bills/submit-x-report", body);
+      setReport(res.data);
+      setIsZ(false);
+      message.success(`X отчет ${res.data.reportCode} е предаден`);
+    } catch (error) {
+      message.error(error.response?.data?.message || "Грешка при предаване на X отчета!");
+    }
+    setLoading(false);
+  };
+
   const handleCloseShift = async () => {
     if (!dates[0] || !dates[1]) {
       message.error("Избери период!");
@@ -118,6 +146,7 @@ const ReportsPage = () => {
 
   const reportTitle = () => {
     if (report?.type === "shift") return `Смяна № ${report.reportNumber}`;
+    if (report?.type === "X" && report.reportCode) return `X отчет ${report.reportCode}`;
     if (isZ || report?.type === "Z") {
       return report?.reportNumber ? `Z отчет № ${report.reportNumber}` : "Z отчет (архивиран)";
     }
@@ -128,14 +157,14 @@ const ReportsPage = () => {
     if (!report) return;
     const rows = [
       ["Тип", report.type === "shift" ? "Смяна" : isZ || report.type === "Z" ? "Z" : "X"],
-      ["Номер", report.reportNumber || ""],
+      ["Номер", report.reportCode || report.reportNumber || ""],
       ["Обща сума", report.totalAmount],
       ["Сторно", report.stornoAmount ?? 0],
       ["Нетен оборот", report.netAmount ?? report.totalAmount],
       ["Брой сметки", report.totalBills],
       ["Брой", report.byPayment?.cash || 0],
       ["Карта", report.byPayment?.card || 0],
-      ["На стая", (isZ || report.type === "Z" ? report.roomAmount : report.byPayment?.room) || 0],
+      ["На стая", report.byPayment?.room || report.roomAmount || 0],
       [],
       ["Артикул", "Брой", "Оборот"],
       ...Object.entries(report.items || {}).map(([name, v]) => [name, v.quantity, v.total]),
@@ -190,11 +219,20 @@ const ReportsPage = () => {
               Генерирай X отчет
             </Button>
           </Col>
-          <Col>
-            <Button danger onClick={handleCloseShift} loading={loading}>
-              Приключи смяна
-            </Button>
-          </Col>
+          {userRole !== "auditor" && (
+            <Col>
+              <Button onClick={handleSubmitX} loading={loading}>
+                Предай X отчет
+              </Button>
+            </Col>
+          )}
+          {userRole === "admin" && (
+            <Col>
+              <Button danger onClick={handleCloseShift} loading={loading}>
+                Приключи смяна
+              </Button>
+            </Col>
+          )}
           {userRole === "admin" && (
             <Col>
               <Button type="primary" danger onClick={handleZReport} loading={loading}>
@@ -219,6 +257,9 @@ const ReportsPage = () => {
             <Title level={3} style={{ textAlign: "center" }}>
               {reportTitle()}
             </Title>
+            {report.type === "X" && report.userName && (
+              <Text style={{ display: "block", textAlign: "center" }}>{report.userName}</Text>
+            )}
             {report.fiscalReportId && (isZ || report.type === "Z") && (
               <Text type="secondary">Номер от принтера: {report.fiscalReportId}</Text>
             )}
@@ -251,7 +292,7 @@ const ReportsPage = () => {
               </Col>
               <Col>
                 <Statistic
-                  title={isZ || report.type === "Z" ? "На стая (извън Z)" : "На стая"}
+                  title="На стая"
                   value={
                     Number(isZ || report.type === "Z" ? report.roomAmount : report.byPayment?.room) || 0
                   }

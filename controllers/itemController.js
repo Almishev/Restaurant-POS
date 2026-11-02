@@ -26,10 +26,21 @@ const addItemController = async (req, res) => {
 const editItemController = async (req, res) => {
   try {
     const { itemId } = req.body;
-    console.log(itemId);
-    await itemModel.findOneAndUpdate({ _id: itemId }, req.body, {
+    const previous = await itemModel.findById(itemId).lean();
+    const updated = await itemModel.findOneAndUpdate({ _id: itemId }, req.body, {
       new: true,
     });
+    if (previous && updated && Number(previous.price) !== Number(updated.price)) {
+      const { writeAudit } = require("../services/auditService");
+      await writeAudit({
+        action: "price-change",
+        userId: req.authUser?.userId || "",
+        userName: req.authUser?.name || "",
+        entity: "item",
+        entityId: itemId,
+        detail: `${previous.name}: ${previous.price} -> ${updated.price}`,
+      });
+    }
 
     res.status(201).json("item Updated");
   } catch (error) {

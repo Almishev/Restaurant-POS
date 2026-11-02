@@ -364,6 +364,29 @@ const BillsPage = () => {
                       : selectedBill.paymentMode || "-"}
                   </b>
                   <br />
+                  УНП: <b>{selectedBill.uniqueSaleNumber || "—"}</b>
+                  <br />
+                  Фискален бон: <b>{selectedBill.fiscalReceiptId || "—"}</b>
+                  {userRole === "admin" && selectedBill.hotelPostStatus === "pending" && (
+                    <>
+                      <br />
+                      <Button
+                        size="small"
+                        onClick={async () => {
+                          try {
+                            await axios.post(`/api/bills/retry-hotel/${selectedBill._id}`);
+                            message.success("Сметката е качена към стаята");
+                            getAllBills();
+                          } catch (error) {
+                            message.error(error.response?.data?.message || "Хотелът не прие сметката");
+                          }
+                        }}
+                      >
+                        Повтори качване към стаята
+                      </Button>
+                    </>
+                  )}
+                  <br />
                   Дата :{" "}
                   <b>
                     {selectedBill.date

@@ -23,6 +23,34 @@ app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: false }));
 app.use(morgan("dev"));
 
+const MONEY_LOCKED = "Приключена продажба не може да се изтрива или да се променя сумата. Корекцията е само чрез сторно.";
+
+function rejectCompletedSaleChange(req, res, next) {
+  if (req.method === "DELETE" || req.method === "PUT" || req.method === "PATCH") {
+    return res.status(403).json({ message: MONEY_LOCKED });
+  }
+  next();
+}
+
+app.use("/api/bills", rejectCompletedSaleChange);
+
+const Users = require("./models/userModel");
+app.use(async (req, res, next) => {
+  if (req.method === "GET" || req.method === "HEAD" || req.method === "OPTIONS") return next();
+  if (req.path === "/api/users/login") return next();
+  const userId = req.headers["x-user-id"];
+  if (!userId) return next();
+  try {
+    const user = await Users.findOne({ userId: String(userId) });
+    if (user && user.role === "auditor") {
+      return res.status(403).json({ message: "Одиторът има само право на преглед" });
+    }
+    next();
+  } catch (error) {
+    next(error);
+  }
+});
+
 //routes
 app.use("/api/items", require("./routes/itemRoutes"));
 app.use("/api/users", require("./routes/userRoutes"));
@@ -36,7 +64,12 @@ app.use('/api/stornos', require("./routes/stornoRoute"));
 
 // Liveness for Docker HEALTHCHECK / load balancers
 app.get("/api/health", (req, res) => {
-  res.status(200).json({ ok: true });
+  const pkg = require("./package.json");
+  res.status(200).json({
+    ok: true,
+    name: "PirinPixel restaurant",
+    version: pkg.version,
+  });
 });
 
 // Serve React build only when present (Docker/production). In local dev use CRA on :3000.

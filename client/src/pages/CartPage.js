@@ -8,9 +8,10 @@ import {
   PlusCircleOutlined,
   MinusCircleOutlined,
 } from "@ant-design/icons";
-import { Table, Button, Modal, message, Form, Input, Select } from "antd";
+import { Table, Button, Modal, message, Form, InputNumber, Select } from "antd";
 import SelectedTableInfo from "../components/SelectedTableInfo";
 import { formatPrice } from "../utils/formatPrice";
+import { useHotelLink } from "../utils/hotelLink";
 
 const CartPage = () => {
   const [subTotal, setSubTotal] = useState(0);
@@ -20,6 +21,8 @@ const CartPage = () => {
   const [roomsError, setRoomsError] = useState("");
   const [form] = Form.useForm();
   const paymentMode = Form.useWatch("paymentMode", form);
+  const cashReceived = Form.useWatch("cashReceived", form);
+  const hotelLink = useHotelLink();
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { cartItems } = useSelector((state) => state.rootReducer);
@@ -126,6 +129,11 @@ const CartPage = () => {
   const handleSubmit = async (value) => {
     try {
       const userData = JSON.parse(localStorage.getItem("auth"));
+      const isCash = value.paymentMode === "Брой" || value.paymentMode === "cash";
+      if (isCash && value.cashReceived != null && value.cashReceived !== "" && Number(value.cashReceived) + 0.001 < Number(subTotal)) {
+        message.error("Получените пари са по-малко от сметката");
+        return;
+      }
       const newObject = {
         ...value,
         cartItems,
@@ -212,9 +220,14 @@ const CartPage = () => {
             <Select style={{ minWidth: 220 }}>
               <Select.Option value="cash">Брой</Select.Option>
               <Select.Option value="card">Карта</Select.Option>
-              <Select.Option value="На стая">На стая</Select.Option>
+              {hotelLink && <Select.Option value="На стая">На стая</Select.Option>}
             </Select>
           </Form.Item>
+          {(paymentMode === "Брой" || paymentMode === "cash") && (
+            <Form.Item name="cashReceived" label="Получени">
+              <InputNumber min={0} step={0.01} style={{ width: "100%" }} placeholder={formatPrice(subTotal)} />
+            </Form.Item>
+          )}
           {paymentMode === "На стая" && (
             <Form.Item name="hotelBookingId" label="Стая" rules={[{ required: true, message: "Изберете стая" }]}>
               <Select
@@ -247,6 +260,11 @@ const CartPage = () => {
               Обща сума -{" "}
               <b>{formatPrice(subTotal)}</b>
             </h3>
+            {(paymentMode === "Брой" || paymentMode === "cash") && cashReceived != null && cashReceived !== "" && (
+              <h5>
+                Ресто : <b>{formatPrice(Math.max(0, Math.round((Number(cashReceived) - subTotal) * 100) / 100))}</b>
+              </h5>
+            )}
           </div>
           <div className="d-flex justify-content-end">
             <Button type="primary" htmlType="submit">

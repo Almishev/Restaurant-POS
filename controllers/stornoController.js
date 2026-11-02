@@ -2,6 +2,8 @@ const Storno = require("../models/stornoModel");
 const Bills = require("../models/billsModel");
 const fiscalService = require("../services/fiscalService");
 const hotelPmsService = require("../services/hotelPmsService");
+const { writeAudit } = require("../services/auditService");
+const { resolveOperator } = require("../services/operatorService");
 const Report = require("../models/reportModel");
 const Recipe = require("../models/recipeModel");
 const Inventory = require("../models/inventoryModel");
@@ -161,6 +163,22 @@ const createStornoController = async (req, res) => {
     const tax = Math.round(subTotal * taxRate * 100) / 100;
     const totalAmount = Math.round((subTotal + tax) * 100) / 100;
 
+    const operator = await resolveOperator(userId);
+    let fiscalResult;
+    try {
+      fiscalResult = await fiscalService.printStornoBon(
+        originalBill,
+        "pending",
+        reason,
+        validatedItems,
+        operator
+      );
+    } catch (fiscalError) {
+      return res.status(502).json({
+        error: fiscalError.message || "Фискалното устройство отказа сторното",
+      });
+    }
+
     const stornoBill = new Storno({
       type: "bill",
       originalBillId,
@@ -176,6 +194,13 @@ const createStornoController = async (req, res) => {
       originalBillFiscalId: originalBill.fiscalReceiptId || "",
       customerName: originalBill.customerName || originalBill.tableName || "",
       tableName: originalBill.tableName || "",
+      fiscalReceiptId: fiscalResult.fiscalReceiptId,
+      fiscalReceiptTimestamp: fiscalResult.timestamp,
+      fiscalStatus: "completed",
+      uniqueSaleNumber: fiscalResult.uniqueSaleNumber,
+      fiscalMemorySerialNumber: fiscalResult.fiscalMemorySerialNumber,
+      fiscalDeviceSerialNumber: fiscalResult.fiscalDeviceSerialNumber,
+      hotelStornoStatus: isRoomCharge(originalBill.paymentMode) ? "pending" : "n/a",
     });
 
     const newStorno = await stornoBill.save();
@@ -194,7 +219,6 @@ const createStornoController = async (req, res) => {
 
     originalBill.stornoedQuantities = stornoedMap;
 
-    // Full void if nothing remaining
     const fullyStornoed = (originalBill.cartItems || []).every((line) => {
       const rem = getRemainingQty(
         { ...originalBill.toObject(), stornoedQuantities: stornoedMap },
@@ -208,78 +232,50 @@ const createStornoController = async (req, res) => {
     }
     await originalBill.save();
 
-    if (isRoomCharge(originalBill.paymentMode)) {
-      try {
-        await hotelPmsService.stornoRoomCharge(
-          String(originalBill._id),
-          totalAmount,
-          roomStornoKey(originalBill, validatedItems, totalAmount)
-        );
-      } catch (hotelErr) {
-        originalBill.stornoedQuantities = previousMap;
-        originalBill.isStornoed = false;
-        await originalBill.save();
-        await Storno.findByIdAndDelete(newStorno._id);
-        return res.status(hotelErr.status || 502).json({
-          error: hotelErr.message || "Хотелът отказа сторното",
-        });
-      }
-
-      try {
-        await restoreInventoryForItems(validatedItems, userId);
-      } catch (invErr) {
-        console.log("[STORNO] Inventory restore error:", invErr);
-      }
-      newStorno.fiscalStatus = "n/a";
-      await newStorno.save();
-      return res.status(201).json({
-        success: true,
-        stornoId: newStorno._id,
-        message: "Сторното е свалено от стаята",
-        isFullStorno: fullyStornoed,
-      });
-    }
-
-    // Restore inventory
     try {
       await restoreInventoryForItems(validatedItems, userId);
     } catch (invErr) {
       console.log("[STORNO] Inventory restore error:", invErr);
     }
 
-    try {
-      const fiscalResult = await fiscalService.printStornoBon(
-        originalBill,
-        newStorno._id,
-        reason,
-        validatedItems
-      );
+    await writeAudit({
+      action: "storno",
+      userId,
+      userName,
+      entity: "storno",
+      entityId: newStorno._id,
+      detail: `${fiscalResult.uniqueSaleNumber || ""} към ${originalBill.uniqueSaleNumber || originalBill._id}`,
+    });
 
-      newStorno.fiscalReceiptId = fiscalResult.fiscalReceiptId;
-      newStorno.fiscalReceiptTimestamp = fiscalResult.timestamp;
-      newStorno.fiscalStatus = "completed";
-      await newStorno.save();
-    } catch (fiscalError) {
-      console.log("[STORNO] Fiscal error:", fiscalError);
-      newStorno.fiscalStatus = "error";
-      newStorno.fiscalErrorMessage =
-        fiscalError.message || "Грешка при фискализация (тестов режим)";
-      await newStorno.save();
-
-      return res.status(207).json({
-        success: true,
-        stornoId: newStorno._id,
-        fiscalError: fiscalError.message || "Неизвестна грешка при фискализация",
-        message:
-          "Сторно операцията е записана, но има проблем с фискализацията (тестов режим)",
-        isFullStorno: fullyStornoed,
-      });
+    if (isRoomCharge(originalBill.paymentMode) && hotelPmsService.isConfigured()) {
+      try {
+        await hotelPmsService.stornoRoomCharge(
+          String(originalBill._id),
+          totalAmount,
+          roomStornoKey(originalBill, validatedItems, totalAmount)
+        );
+        newStorno.hotelStornoStatus = "posted";
+        await newStorno.save();
+      } catch (hotelErr) {
+        newStorno.hotelStornoStatus = "pending";
+        newStorno.fiscalErrorMessage = hotelErr.message || "Хотелът не прие сторното";
+        await newStorno.save();
+        return res.status(201).json({
+          success: true,
+          stornoId: newStorno._id,
+          message: "Сторно бонът е издаден. Свалянето от стаята не мина и може да се повтори.",
+          hotelStornoStatus: "pending",
+          isFullStorno: fullyStornoed,
+        });
+      }
     }
 
     res.status(201).json({
       success: true,
       stornoId: newStorno._id,
-      message: "Сторно операцията е успешна",
+      message: isRoomCharge(originalBill.paymentMode)
+        ? "Сторното е издадено и свалено от стаята"
+        : "Сторно операцията е успешна",
       isFullStorno: fullyStornoed,
     });
   } catch (error) {
@@ -566,10 +562,37 @@ const createPreBillStornoController = async (req, res) => {
   }
 };
 
+const retryHotelStornoController = async (req, res) => {
+  try {
+    const storno = await Storno.findById(req.params.id);
+    if (!storno || storno.hotelStornoStatus !== "pending") {
+      return res.status(404).json({ message: "Няма чакащо сторно към стая" });
+    }
+    const bill = await Bills.findById(storno.originalBillId);
+    if (!bill) {
+      return res.status(404).json({ message: "Оригиналната сметка не е намерена" });
+    }
+    await hotelPmsService.stornoRoomCharge(
+      String(bill._id),
+      storno.totalAmount,
+      roomStornoKey(bill, storno.cartItems, storno.totalAmount)
+    );
+    storno.hotelStornoStatus = "posted";
+    storno.fiscalErrorMessage = undefined;
+    await storno.save();
+    return res.json({ message: "Сторното е свалено от стаята", hotelStornoStatus: "posted" });
+  } catch (error) {
+    return res.status(error.status || 502).json({
+      message: error.message || "Хотелът отказа сторното",
+    });
+  }
+};
+
 module.exports = {
   createStornoController,
   createPreBillStornoController,
   getStornosController,
   getStornoDetailsController,
   getStornoReportController,
+  retryHotelStornoController,
 };
